@@ -16,11 +16,13 @@ This is a proof-of-concept for a simple, modular agent framework called AgentKit
 ## How to Run
 
 1.  **Install dependencies:**
+
     ```bash
     pip install -r requirements.txt
     ```
 
 2.  **Run the FastAPI backend:**
+
     ```bash
     uvicorn app.main:app --reload --app-dir agent-poc
     ```

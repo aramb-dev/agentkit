@@ -8,8 +8,10 @@ user_message = st.text_input("Enter your message:")
 
 if user_message:
     # Make a request to the FastAPI backend
-    response = requests.post("http://127.0.0.1:8000/chat", json={"message": user_message})
-    
+    response = requests.post(
+        "http://127.0.0.1:8000/chat", json={"message": user_message}
+    )
+
     if response.status_code == 200:
         data = response.json()
         st.write("Agent's response:")
