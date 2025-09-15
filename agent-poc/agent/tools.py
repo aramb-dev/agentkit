@@ -1,11 +1,13 @@
 from langchain.tools import tool
 
+
 @tool
 def web_search_tool(query: str) -> str:
     """
     A tool that simulates a web search.
     """
     return f"Fake search result for '{query}': The answer is 42."
+
 
 @tool
 def retriever_tool(query: str) -> str:
@@ -14,8 +16,10 @@ def retriever_tool(query: str) -> str:
     """
     return f"Fake retrieved doc chunk for '{query}': This is a document about the meaning of life."
 
+
 # In-memory store for the memory tool
 memory_store = {}
+
 
 @tool
 def memory_tool(action: str, data: str = "") -> str:
