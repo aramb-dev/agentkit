@@ -1,9 +1,9 @@
 from .router import route_query
 from .tools import web_search_tool, retriever_tool, memory_tool
-from .prompts import SYSTEM_PROMPT, SUMMARY_PROMPT
+from .prompts import SUMMARY_PROMPT
 from langchain.prompts import PromptTemplate
 from langchain.schema.runnable import RunnablePassthrough
-from langchain.llms.fake import FakeListLLM
+from langchain_community.llms import Ollama
 
 # A map of tool names to their corresponding functions
 TOOL_MAP = {
@@ -17,8 +17,7 @@ def run_agent(query: str) -> dict:
     """
     Runs the agent loop.
     """
-    # For this PoC, we'll use a fake LLM
-    llm = FakeListLLM(responses=["This is a direct answer from the LLM."])
+    llm = Ollama(model="phi3")
 
     # 1. Route the query
     tool_name = route_query(query)

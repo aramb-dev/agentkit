@@ -2,3 +2,6 @@ langchain
 fastapi
 uvicorn
 streamlit
+langchain-community
+langchain-ollama
+langchain-ollama
