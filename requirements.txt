@@ -8,3 +8,5 @@ langchain-google-genai
 python-dotenv
 tavily-python
 reflex
+
+reflex==0.8.11
