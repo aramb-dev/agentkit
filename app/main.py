@@ -1,9 +1,10 @@
-from fastapi import FastAPI
-from pydantic import BaseModel
-from agent.agent import run_agent
 from dotenv import load_dotenv
 
 load_dotenv()
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+from agent.agent import run_agent
 
 app = FastAPI()
 
