@@ -1,3 +1,9 @@
-from langchain import hub
+from langchain.prompts import ChatPromptTemplate, MessagesPlaceholder
 
-AGENT_PROMPT = hub.pull("hwchase17/react")
+AGENT_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        ("system", "You are a helpful assistant. Be concise."),
+        ("user", "{input}"),
+        MessagesPlaceholder(variable_name="agent_scratchpad"),
+    ]
+)

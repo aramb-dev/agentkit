@@ -4,4 +4,5 @@ uvicorn
 streamlit
 langchain-community
 langchain-ollama
-langchain-ollama
+langchain-google-genai
+python-dotenv
