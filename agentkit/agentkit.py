@@ -37,7 +37,7 @@ class State(rx.State):
         # Call the backend
         try:
             response = requests.post(
-                "http://127.0.0.1:8000/chat",
+                "http://127.0.0.1:8001/chat",
                 json={"message": self.question, "model": self.model},
             )
             response.raise_for_status()  # Raise an exception for bad status codes
@@ -50,11 +50,6 @@ class State(rx.State):
         self.chats.append(("Agent", answer))
         self.question = ""
         yield
-
-    def handle_key_down(self, key: str):
-        """Handle the enter key."""
-        if key == "Enter":
-            return self.answer
 
 
 def qa(question: str, answer: str) -> rx.Component:
@@ -94,7 +89,6 @@ def action_bar() -> rx.Component:
             value=State.question,
             placeholder="Ask a question",
             on_change=State.set_question,
-            on_key_down=State.handle_key_down,
             width="100%",
         ),
         rx.button("Ask", on_click=State.answer),
@@ -108,7 +102,7 @@ def index() -> rx.Component:
         rx.vstack(
             rx.heading("AgentKit", size="9"),
             rx.radio(
-                ["phi3", "gemini"],
+                ["phi3", "gemini-1.5-flash"],
                 value=State.model,
                 on_change=State.set_model,
             ),

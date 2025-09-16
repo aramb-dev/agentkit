@@ -1,4 +1,5 @@
 from typing import Dict, Optional
+import os
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain_ollama import OllamaLLM
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -13,7 +14,24 @@ async def run_agent(query: str, model: str) -> Dict[str, Optional[str]]:
     if model == "phi3":
         llm = OllamaLLM(model="phi3")
     else:
-        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")  # type: ignore
+        # Check if Google API key is available
+        google_api_key = os.getenv("GOOGLE_API_KEY")
+        if not google_api_key:
+            return {
+                "answer": "Error: Google API key not found. Please set GOOGLE_API_KEY in your .env file to use Gemini models.",
+                "tool_used": None
+            }
+        
+        try:
+            llm = ChatGoogleGenerativeAI(
+                model="gemini-1.5-flash",  # Use available model
+                google_api_key=google_api_key
+            )
+        except Exception as e:
+            return {
+                "answer": f"Error initializing Gemini model: {str(e)}",
+                "tool_used": None
+            }
 
     tools = [web_search_tool, retriever_tool, memory_tool]  # type: ignore
 
