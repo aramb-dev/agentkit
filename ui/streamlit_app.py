@@ -20,7 +20,6 @@ if user_message:
         data = response.json()
         st.write("Agent's response:")
         st.write(data["answer"])
-        if data["tool_used"]:
-            st.write(f"Tool used: {data['tool_used']}")
+
     else:
         st.write("Error: Could not get a response from the agent.")

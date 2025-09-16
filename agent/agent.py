@@ -19,9 +19,17 @@ async def run_agent(query: str, model: str) -> Dict[str, Optional[str]]:
 
     agent = create_react_agent(llm, tools, AGENT_PROMPT)  # type: ignore
     agent_executor = AgentExecutor(
-        agent=agent, tools=tools, verbose=True, handle_parsing_errors=True
+        agent=agent,
+        tools=tools,
+        verbose=True,
+        handle_parsing_errors=True,
+        return_intermediate_steps=True,
     )
 
     response = await agent_executor.ainvoke({"input": query})
 
-    return {"answer": response.get("output"), "tool_used": "agent"}
+    tool_used = None
+    if "intermediate_steps" in response and response["intermediate_steps"]:
+        tool_used = response["intermediate_steps"][0][0].tool
+
+    return {"answer": response.get("output"), "tool_used": tool_used}
