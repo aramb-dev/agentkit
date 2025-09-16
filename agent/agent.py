@@ -1,3 +1,4 @@
+from typing import Dict, Optional
 from .router import route_query
 from .tools import web_search_tool, retriever_tool, memory_tool
 from .prompts import SUMMARY_PROMPT
@@ -13,7 +14,7 @@ TOOL_MAP = {
 }
 
 
-def run_agent(query: str) -> dict:
+def run_agent(query: str) -> Dict[str, Optional[str]]:
     """
     Runs the agent loop.
     """
