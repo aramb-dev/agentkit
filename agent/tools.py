@@ -1,8 +1,8 @@
 from langchain.tools import tool
-from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_tavily import TavilySearch
 from typing import Dict
 
-web_search_tool = TavilySearchResults()
+web_search_tool = TavilySearch()
 
 
 @tool

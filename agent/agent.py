@@ -29,8 +29,14 @@ async def run_agent(query: str, model: str) -> Dict[str, Optional[str]]:
                 google_api_key=google_api_key,
             )
         except Exception as e:
+            error_msg = str(e)
+            if "API_KEY_INVALID" in error_msg:
+                return {
+                    "answer": "Error: The Google API key is invalid. Please check your GOOGLE_API_KEY in the .env file and ensure it's a valid key from Google AI Studio.",
+                    "tool_used": None,
+                }
             return {
-                "answer": f"Error initializing Gemini model: {str(e)}",
+                "answer": f"Error initializing Gemini model: {error_msg}",
                 "tool_used": None,
             }
 
@@ -46,7 +52,19 @@ async def run_agent(query: str, model: str) -> Dict[str, Optional[str]]:
         return_intermediate_steps=True,
     )
 
-    response = await agent_executor.ainvoke({"input": query})
+    try:
+        response = await agent_executor.ainvoke({"input": query})
+    except Exception as e:
+        error_msg = str(e)
+        if "API_KEY_INVALID" in error_msg or "API key not valid" in error_msg:
+            return {
+                "answer": "Error: The Google API key is invalid or expired. Please update your GOOGLE_API_KEY in the .env file with a valid key from Google AI Studio.",
+                "tool_used": None,
+            }
+        return {
+            "answer": f"Error during agent execution: {error_msg}",
+            "tool_used": None,
+        }
 
     tool_used = None
     if "intermediate_steps" in response and response["intermediate_steps"]:
