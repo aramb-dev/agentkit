@@ -13,9 +13,9 @@ async def run_agent(query: str, model: str) -> Dict[str, Optional[str]]:
     if model == "phi3":
         llm = OllamaLLM(model="phi3")
     else:
-        llm = ChatGoogleGenerativeAI(model="gemini-pro")  # type: ignore
+        llm = ChatGoogleGenerativeAI(model="gemini-2.5-flash")  # type: ignore
 
-    tools = [web_search_tool, retriever_tool, memory_tool]
+    tools = [web_search_tool, retriever_tool, memory_tool]  # type: ignore
 
     agent = create_react_agent(llm, tools, AGENT_PROMPT)  # type: ignore
     agent_executor = AgentExecutor(

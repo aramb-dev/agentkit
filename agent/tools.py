@@ -1,12 +1,8 @@
 from langchain.tools import tool
+from langchain_community.tools.tavily_search import TavilySearchResults
+from typing import Dict
 
-
-@tool
-def web_search_tool(query: str) -> str:
-    """
-    A tool that simulates a web search.
-    """
-    return f"Fake search result for '{query}': The answer is 42."
+web_search_tool = TavilySearchResults()
 
 
 @tool
@@ -18,7 +14,7 @@ def retriever_tool(query: str) -> str:
 
 
 # In-memory store for the memory tool
-memory_store = {}
+memory_store: Dict[str, str] = {}
 
 
 @tool
