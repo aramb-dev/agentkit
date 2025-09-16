@@ -10,8 +10,8 @@ class ChatRequest(BaseModel):
 
 
 @app.post("/chat")
-def chat(request: ChatRequest):
-    response = run_agent(request.message)
+async def chat(request: ChatRequest):
+    response = await run_agent(request.message)
     return response
 
 
