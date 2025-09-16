@@ -1,6 +1,7 @@
-from typing import Dict, Optional
+from typing import Dict, Optional, cast
 import os
 from langchain.agents import AgentExecutor, create_react_agent
+from langchain_core.tools import BaseTool
 from langchain_ollama import OllamaLLM
 from langchain_google_genai import ChatGoogleGenerativeAI
 from .prompts import AGENT_PROMPT
@@ -19,21 +20,22 @@ async def run_agent(query: str, model: str) -> Dict[str, Optional[str]]:
         if not google_api_key:
             return {
                 "answer": "Error: Google API key not found. Please set GOOGLE_API_KEY in your .env file to use Gemini models.",
-                "tool_used": None
+                "tool_used": None,
             }
-        
+
         try:
             llm = ChatGoogleGenerativeAI(
                 model="gemini-1.5-flash",  # Use available model
-                google_api_key=google_api_key
+                google_api_key=google_api_key,
             )
         except Exception as e:
             return {
                 "answer": f"Error initializing Gemini model: {str(e)}",
-                "tool_used": None
+                "tool_used": None,
             }
 
-    tools = [web_search_tool, retriever_tool, memory_tool]  # type: ignore
+    # Type cast the tools to satisfy type checker
+    tools = cast(list[BaseTool], [web_search_tool, retriever_tool, memory_tool])
 
     agent = create_react_agent(llm, tools, AGENT_PROMPT)  # type: ignore
     agent_executor = AgentExecutor(

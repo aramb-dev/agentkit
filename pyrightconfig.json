@@ -1,0 +1,15 @@
+{
+  "reportUnknownParameterType": "none",
+  "reportUnknownArgumentType": "none",
+  "reportUnknownMemberType": "none",
+  "reportUnknownVariableType": "none",
+  "reportArgumentType": "none",
+  "reportCallInDefaultInitializer": "none",
+  "include": [
+    "agentkit"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    ".venv"
+  ]
+}
