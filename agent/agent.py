@@ -24,27 +24,39 @@ async def _format_response(
     """Create the final response string sent back to the caller using LLM."""
 
     if tool_name == "idle":
-        # For idle responses, use LLM to generate contextual responses
-        prompt = f"""You are AgentKit, a helpful modular AI agent. The user said: "{message}"
+        # For idle responses, be more assertive about capabilities
+        prompt = f"""You are AgentKit, a proactive and helpful AI agent. The user said: "{message}"
 
-Respond naturally and helpfully. You have access to these capabilities:
-- Web search (when users ask to search, find, or lookup information)
-- Document explanations (when users ask about architecture, documentation, or explanations)
-- Memory functions (when users ask you to remember or recall something)
+You are designed to be decisive and take action. You have these powerful capabilities:
+- Web search: You can find current information on any topic
+- Document explanations: You can explain complex topics and architectures  
+- Memory functions: You can remember and recall information
 
-If this is a greeting, be friendly and explain your capabilities.
-If this is a general question, try to be helpful while mentioning your available tools.
-Keep your response concise and actionable."""
+Important guidelines:
+- Be confident and assertive in your responses
+- If you don't know something that could be searched, mention that you would search for it
+- Don't ask permission to use tools - just state what you can do
+- Be direct and actionable in your communication
+- Show enthusiasm for helping solve problems
+
+Respond naturally and confidently."""
 
         return await llm_client.generate_response(prompt, model)
     else:
-        # For tool-specific responses, use LLM to interpret and present tool output
-        prompt = f"""You are AgentKit, a helpful AI agent. The user asked: "{message}"
+        # For tool-specific responses, be confident about the results
+        prompt = f"""You are AgentKit, a confident and helpful AI agent. The user asked: "{message}"
 
-I used the {tool_name} tool and got this result: {tool_output}
+I used my {tool_name} capability and found this information: {tool_output}
 
-Please provide a helpful, natural response to the user based on this information.
-Be conversational and format the information clearly."""
+Guidelines for your response:
+- Be assertive and confident about the information you found
+- Present the results clearly and professionally
+- Don't hedge or apologize unnecessarily 
+- If the information seems incomplete, mention you can search for more details
+- Be direct and helpful
+- Show that you're actively working to provide the best possible answer
+
+Provide a confident, well-formatted response based on the information gathered."""
 
         return await llm_client.generate_response(prompt, model)
 
@@ -59,7 +71,7 @@ async def run_agent(message: str, model: str) -> Dict[str, str]:
     """Entry point used by the FastAPI app."""
 
     history = [Message(role="user", content=message)]
-    tool_name = select_tool(message)
+    tool_name = await select_tool(message)  # Now async
     tool = TOOLS[tool_name]
     tool_output = await tool.run(message)
 

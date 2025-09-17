@@ -94,10 +94,10 @@ return response.text
 
 ### 🛠️ Architecture
 
-- **Router**: Intelligent query analysis and tool selection
-- **Tools**: Modular functions with real API integrations
-- **LLM Client**: Official Google Gen AI SDK integration
-- **Agent**: Orchestrates tools + AI for comprehensive responses
+- **LLM-Based Router**: Uses Gemini to intelligently analyze queries and select the best tool
+- **Smart Tool Selection**: No more keyword matching - AI understands context and intent
+- **Modular Tools**: Real API integrations for web search, documentation, and memory
+- **Assertive Agent**: Proactively takes action instead of asking permission
 
 ## Example Interactions
 
