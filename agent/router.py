@@ -9,13 +9,12 @@ from .llm_client import llm_client
 
 async def select_tool(message: str) -> str:
     """Choose the most appropriate tool using LLM-based intelligent routing."""
-    
+
     # Create a prompt for the LLM to choose the best tool
-    tool_descriptions = "\n".join([
-        f"- {name}: {tool.description}" 
-        for name, tool in TOOLS.items()
-    ])
-    
+    tool_descriptions = "\n".join(
+        [f"- {name}: {tool.description}" for name, tool in TOOLS.items()]
+    )
+
     routing_prompt = f"""You are a smart routing agent for AgentKit. Your job is to analyze the user's query and select the most appropriate tool.
 
 Available tools:
@@ -35,14 +34,14 @@ Respond with ONLY the tool name (web, rag, memory, or idle). No explanation need
         # Use LLM to intelligently select the tool
         llm_response = await llm_client.generate_response(routing_prompt, "gemini")
         selected_tool = llm_response.strip().lower()
-        
+
         # Validate the response and ensure it's a valid tool
         if selected_tool in TOOLS:
             return selected_tool
         else:
             # Fallback to keyword-based routing if LLM returns invalid response
             return _fallback_keyword_routing(message)
-            
+
     except Exception as e:
         print(f"Error in LLM routing: {e}")
         return _fallback_keyword_routing(message)
@@ -51,11 +50,17 @@ Respond with ONLY the tool name (web, rag, memory, or idle). No explanation need
 def _fallback_keyword_routing(message: str) -> str:
     """Fallback keyword-based routing when LLM routing fails."""
     lowered = message.lower()
-    
+
     # Simple keyword matching as fallback
-    if any(word in lowered for word in ["search", "find", "who", "what", "when", "where", "news", "latest"]):
+    if any(
+        word in lowered
+        for word in ["search", "find", "who", "what", "when", "where", "news", "latest"]
+    ):
         return "web"
-    elif any(word in lowered for word in ["architecture", "setup", "explain agentkit", "how does agentkit"]):
+    elif any(
+        word in lowered
+        for word in ["architecture", "setup", "explain agentkit", "how does agentkit"]
+    ):
         return "rag"
     elif any(word in lowered for word in ["remember", "recall", "store", "memory"]):
         return "memory"
