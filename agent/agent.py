@@ -9,6 +9,7 @@ from typing import Dict, List
 from .prompts import AVAILABLE_TOOLS_PROMPT, SUMMARY_PROMPT, SYSTEM_PROMPT
 from .router import describe_tools, select_tool
 from .tools import TOOLS
+from .llm_client import llm_client
 
 
 @dataclass
@@ -17,18 +18,35 @@ class Message:
     content: str
 
 
-def _format_response(message: str, model: str, tool_name: str, tool_output: str) -> str:
-    """Create the final response string sent back to the caller."""
+async def _format_response(
+    message: str, model: str, tool_name: str, tool_output: str
+) -> str:
+    """Create the final response string sent back to the caller using LLM."""
 
-    reasoning = f"Using the `{tool_name}` tool" if tool_name != "idle" else "No specialised tool was used"
-    context = f"\nTool output: {tool_output}" if tool_output else ""
-    return (
-        f"{SYSTEM_PROMPT.strip()}\n\n"
-        f"Model: {model}\n"
-        f"User asked: {message}\n"
-        f"{reasoning}." + context + "\n"
-        "Final answer: I hope this helps!"
-    )
+    if tool_name == "idle":
+        # For idle responses, use LLM to generate contextual responses
+        prompt = f"""You are AgentKit, a helpful modular AI agent. The user said: "{message}"
+
+Respond naturally and helpfully. You have access to these capabilities:
+- Web search (when users ask to search, find, or lookup information)
+- Document explanations (when users ask about architecture, documentation, or explanations)
+- Memory functions (when users ask you to remember or recall something)
+
+If this is a greeting, be friendly and explain your capabilities.
+If this is a general question, try to be helpful while mentioning your available tools.
+Keep your response concise and actionable."""
+
+        return await llm_client.generate_response(prompt, model)
+    else:
+        # For tool-specific responses, use LLM to interpret and present tool output
+        prompt = f"""You are AgentKit, a helpful AI agent. The user asked: "{message}"
+
+I used the {tool_name} tool and got this result: {tool_output}
+
+Please provide a helpful, natural response to the user based on this information.
+Be conversational and format the information clearly."""
+
+        return await llm_client.generate_response(prompt, model)
 
 
 def _summarise(history: List[Message], final_answer: str) -> str:
@@ -48,7 +66,7 @@ async def run_agent(message: str, model: str) -> Dict[str, str]:
     if tool_name != "idle" and tool_output:
         history.append(Message(role="tool", content=f"{tool_name}: {tool_output}"))
 
-    final_answer = _format_response(message, model, tool_name, tool_output)
+    final_answer = await _format_response(message, model, tool_name, tool_output)
     summary = _summarise(history, final_answer)
 
     tool_overview = AVAILABLE_TOOLS_PROMPT.format(tool_overview=describe_tools())
