@@ -1,10 +1,38 @@
 import streamlit as st
 import requests
+import sys
+import os
+
+# Add the parent directory to Python path so we can import the agent module
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from agent.llm_client import llm_client
 
 st.title("AgentKit PoC")
 
-# Model selection
-model_choice = st.radio("Choose a model:", ("phi3", "gemini"))
+# Get available models from the LLM client
+available_models = llm_client.get_available_models()
+default_model = llm_client.get_default_model()
+
+# Model selection - use available models or fallback to default
+if available_models:
+    # Show available models with default selected
+    try:
+        default_index = available_models.index(default_model)
+    except ValueError:
+        default_index = 0
+
+    model_choice = st.selectbox(
+        "Choose a model:",
+        available_models,
+        index=default_index,
+        help=f"Available Gemini models. Default: {default_model}",
+    )
+else:
+    # Fallback if no models are discovered
+    model_choice = st.selectbox(
+        "Choose a model:", ["gemini"], help="Using default Gemini model"
+    )
 
 # Input for the user's message
 user_message = st.text_input("Enter your message:")
