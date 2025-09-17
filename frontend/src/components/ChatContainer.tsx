@@ -52,7 +52,9 @@ export function ChatContainer() {
         };
 
         loadModels();
-    }, []); const handleSendMessage = async (content: string, attachments: FileAttachment[]) => {
+    }, []);
+
+    const handleSendMessage = async (content: string, attachments: FileAttachment[]) => {
         if (!content.trim() && attachments.length === 0) return;
 
         const userMessage: ChatMessage = {
@@ -71,11 +73,32 @@ export function ChatContainer() {
         }));
 
         try {
-            // Call AgentKit backend
-            const response = await axios.post<AgentResponse>(`${API_BASE_URL}/chat`, {
-                message: content,
-                model: chatState.selectedModel
-                // TODO: Add file uploads to the request
+            // Prepare form data for file uploads
+            const formData = new FormData();
+            formData.append('message', content);
+            formData.append('model', chatState.selectedModel);
+
+            // Add conversation history (last 10 messages for context)
+            const historyForContext = chatState.messages.slice(-10).map(msg => ({
+                role: msg.role,
+                content: msg.content,
+                timestamp: msg.timestamp.toISOString()
+            }));
+            formData.append('history', JSON.stringify(historyForContext));
+
+            // Add files to form data
+            for (const attachment of attachments) {
+                if (attachment.url) {
+                    // If we have a file URL, we'd need to fetch the file
+                    // For now, we'll just send file info
+                    formData.append('files', new Blob([`File: ${attachment.name}`]), attachment.name);
+                }
+            }
+
+            const response = await axios.post<AgentResponse>(`${API_BASE_URL}/chat`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
             });
 
             const assistantMessage: ChatMessage = {

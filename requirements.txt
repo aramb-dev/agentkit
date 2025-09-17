@@ -4,3 +4,6 @@ streamlit
 google-genai
 python-dotenv
 tavily-python
+PyPDF2
+python-docx
+python-multipart
