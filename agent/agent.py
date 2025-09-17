@@ -1,11 +1,74 @@
-from typing import Dict, Optional, cast
+from typing import Dict, Optional, cast, Any, List
 import os
+import json
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain_core.tools import BaseTool
 from langchain_ollama import OllamaLLM
-from langchain_google_genai import ChatGoogleGenerativeAI
+from google import genai
+from google.genai import types
 from .prompts import AGENT_PROMPT
 from .tools import web_search_tool, retriever_tool, memory_tool
+
+
+class GoogleGenAIWrapper:
+    """Wrapper to make Google Gen AI SDK compatible with LangChain."""
+
+    def __init__(self, client, model_name):
+        self.client = client
+        self.model_name = model_name
+
+    def _convert_tools_to_genai_format(self, tools: List[BaseTool]) -> List[types.Tool]:
+        """Convert LangChain tools to Google Gen AI format."""
+        genai_tools = []
+
+        for tool in tools:
+            # Create function declaration for each tool
+            function_declaration = types.FunctionDeclaration(
+                name=tool.name,
+                description=tool.description,
+                parameters=types.Schema(
+                    type="OBJECT",
+                    properties={
+                        "input": types.Schema(
+                            type="STRING", description="Input for the tool"
+                        )
+                    },
+                    required=["input"],
+                ),
+            )
+
+            genai_tool = types.Tool(function_declarations=[function_declaration])
+            genai_tools.append(genai_tool)
+
+        return genai_tools
+
+    def invoke(self, prompt, tools=None):
+        """Sync invoke method for LangChain compatibility."""
+        try:
+            config = types.GenerateContentConfig(
+                temperature=0.1,
+                max_output_tokens=1000,
+            )
+
+            if tools:
+                genai_tools = self._convert_tools_to_genai_format(tools)
+                config.tools = genai_tools
+
+            response = self.client.models.generate_content(
+                model=self.model_name, contents=prompt, config=config
+            )
+
+            return response.text
+        except Exception as e:
+            return f"Error: {str(e)}"
+
+    async def ainvoke(self, prompt, **kwargs):
+        """Async invoke method for LangChain compatibility."""
+        return self.invoke(prompt, **kwargs)
+
+    def __call__(self, prompt, **kwargs):
+        """Make the wrapper callable."""
+        return self.invoke(prompt, **kwargs)
 
 
 async def run_agent(query: str, model: str) -> Dict[str, Optional[str]]:
@@ -24,13 +87,14 @@ async def run_agent(query: str, model: str) -> Dict[str, Optional[str]]:
             }
 
         try:
-            llm = ChatGoogleGenerativeAI(
-                model="gemini-1.5-flash",  # Use available model
-                google_api_key=google_api_key,
-            )
+            # Create Google Gen AI client
+            client = genai.Client(api_key=google_api_key)
+
+            # Create wrapper for LangChain compatibility
+            llm = GoogleGenAIWrapper(client, model)
         except Exception as e:
             error_msg = str(e)
-            if "API_KEY_INVALID" in error_msg:
+            if "API_KEY_INVALID" in error_msg or "invalid API key" in error_msg.lower():
                 return {
                     "answer": "Error: The Google API key is invalid. Please check your GOOGLE_API_KEY in the .env file and ensure it's a valid key from Google AI Studio.",
                     "tool_used": None,

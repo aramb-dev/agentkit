@@ -5,6 +5,7 @@
   "reportUnknownVariableType": "none",
   "reportArgumentType": "none",
   "reportCallInDefaultInitializer": "none",
+  "reportMissingImports": "none",
   "include": [
     "agentkit"
   ],
