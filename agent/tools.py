@@ -54,14 +54,12 @@ async def _web_search(query: str) -> str:
             # Run Tavily search in thread pool to avoid async SSL issues
             def run_search():
                 return tavily_client.search(  # type: ignore
-                    query=query,
-                    search_depth="basic", 
-                    max_results=3
+                    query=query, search_depth="basic", max_results=3
                 )
-            
+
             loop = asyncio.get_running_loop()
             search_result = await loop.run_in_executor(None, run_search)
-            
+
             if search_result and "results" in search_result:
                 results = search_result["results"]
                 if results:
@@ -70,23 +68,28 @@ async def _web_search(query: str) -> str:
                         title = result.get("title", "No title")
                         content = result.get("content", "No content available")
                         url = result.get("url", "")
-                        
+
                         # Truncate content to keep results manageable
-                        content = content[:200] + "..." if len(content) > 200 else content
-                        
+                        content = (
+                            content[:200] + "..." if len(content) > 200 else content
+                        )
+
                         formatted_results.append(
                             f"{i}. **{title}**\n   {content}\n   Source: {url}"
                         )
-                    
+
                     timestamp = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-                    return f"Web search results for '{query}' (as of {timestamp}):\n\n" + "\n\n".join(formatted_results)
-            
+                    return (
+                        f"Web search results for '{query}' (as of {timestamp}):\n\n"
+                        + "\n\n".join(formatted_results)
+                    )
+
             return f"No search results found for '{query}'. Tavily search returned empty results."
-            
+
         except Exception as e:
             print(f"Error with Tavily search: {e}")
             return _fallback_web_search(query)
-    
+
     # Fallback when Tavily is not available
     return _fallback_web_search(query)
 
@@ -94,18 +97,18 @@ async def _web_search(query: str) -> str:
 def _fallback_web_search(query: str) -> str:
     """Fallback web search with simulated results when Tavily is not available."""
     import random
-    
+
     news_items = [
         "Modular AI agents gain popularity in enterprise automation, showing 40% efficiency improvements",
-        "Researchers release lightweight open-source LLMs that run on consumer hardware", 
+        "Researchers release lightweight open-source LLMs that run on consumer hardware",
         "Startups embrace synthetic data pipelines to overcome training data limitations",
         "New study shows AI agents reduce manual task completion time by 60%",
         "Tech giants invest heavily in autonomous agent development for business applications",
     ]
-    
+
     headline = random.choice(news_items)
     timestamp = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-    
+
     return f"Search results for '{query}' (as of {timestamp}):\n\n• {headline}\n\n[Note: This is simulated search data - Tavily API not available]"
 
 

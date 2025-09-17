@@ -1,16 +1,19 @@
 # AgentKit Setup Instructions
 
 ## Overview
+
 AgentKit has been updated to use the official Google Gen AI SDK for intelligent responses instead of hardcoded messages. The agent now provides contextual, AI-generated responses while maintaining its modular tool architecture.
 
 ## Quick Setup
 
 ### 1. Install Dependencies
+
 ```bash
 pip install -r requirements.txt
 ```
 
 ### 2. Set up API Keys
+
 1. **Gemini API Key**: Go to [Google AI Studio](https://aistudio.google.com/app/apikey) and create an API key
 2. **Tavily API Key** (optional but recommended): Go to [Tavily](https://tavily.com) and get a free API key for enhanced web search
 3. Create a `.env` file in the project root:
@@ -24,11 +27,13 @@ TAVILY_API_KEY=your_tavily_api_key_here  # Optional for real web search
 **Note**: Without Tavily API key, the web search will use simulated results. With Tavily, you get real, current web search results.
 
 ### 3. Test the Agent
+
 ```bash
 python3 test_agent_llm.py
 ```
 
 ### 4. Run the Web Interface
+
 ```bash
 # Start the FastAPI backend
 python3 -m uvicorn app.main:app --reload --port 8000
@@ -40,9 +45,11 @@ streamlit run ui/streamlit_app.py
 ## What Was Fixed
 
 ### Problem
+
 The original AgentKit was sending generic "I hope this helps!" responses instead of using AI to generate contextual answers.
 
 ### Solution
+
 1. **Added Modern LLM Integration**: Created `agent/llm_client.py` using the official Google Gen AI SDK
 2. **Updated Response Generation**: Modified `agent/agent.py` to use LLM for all responses
 3. **Enhanced Tools**: Improved tool outputs to provide better context for the LLM
@@ -51,12 +58,14 @@ The original AgentKit was sending generic "I hope this helps!" responses instead
 ### Key Changes
 
 #### Before
+
 ```python
 # Hardcoded generic response
 return "Final answer: I hope this helps!"
 ```
 
 #### After
+
 ```python
 # AI-generated contextual response using Google Gen AI SDK
 response = await self.genai_client.aio.models.generate_content(
@@ -72,7 +81,7 @@ return response.text
 ### 🔧 Tool Selection
 
 - **Web Search**: Real-time web search using Tavily API (with fallback simulation)
-- **Documentation**: Comprehensive AgentKit architecture and setup documentation  
+- **Documentation**: Comprehensive AgentKit architecture and setup documentation
 - **Memory**: Conversation memory with timestamps and context
 - **General**: Intelligent conversation for greetings and general questions
 

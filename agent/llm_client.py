@@ -34,12 +34,12 @@ class LLMClient:
         if model == "gemini" and self.genai_client:
             try:
                 response = await self.genai_client.aio.models.generate_content(
-                    model='gemini-2.0-flash-001',
+                    model="gemini-2.0-flash-001",
                     contents=prompt,
                     config=types.GenerateContentConfig(
                         temperature=0.7,
                         max_output_tokens=1000,
-                    )
+                    ),
                 )
                 return response.text if response.text else "No response generated"
             except Exception as e:
