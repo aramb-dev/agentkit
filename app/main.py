@@ -5,10 +5,14 @@ from typing import List, Optional
 
 load_dotenv()
 
+# Configuration from environment variables
+MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", "10485760"))  # 10MB default
+CONVERSATION_HISTORY_LIMIT = int(os.getenv("CONVERSATION_HISTORY_LIMIT", "50"))  # 50 messages default
+
 # Add the parent directory to Python path so we can import the agent module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, UploadFile, File, Form
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
@@ -61,6 +65,9 @@ async def chat(
     # Parse conversation history
     try:
         conversation_history = json.loads(history) if history != "[]" else []
+        # Limit conversation history to prevent memory issues
+        if len(conversation_history) > CONVERSATION_HISTORY_LIMIT:
+            conversation_history = conversation_history[-CONVERSATION_HISTORY_LIMIT:]
     except json.JSONDecodeError:
         conversation_history = []
 
@@ -72,6 +79,13 @@ async def chat(
         for file in files:
             if file.filename:
                 content = await file.read()
+                
+                # Check file size limit
+                if len(content) > MAX_FILE_SIZE:
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"File '{file.filename}' is too large. Maximum size allowed: {MAX_FILE_SIZE / (1024*1024):.1f}MB"
+                    )
 
                 # Store file permanently
                 file_metadata = await file_manager.store_file(
