@@ -1,8 +1,9 @@
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import type { ChatMessage as ChatMessageType } from "@/types/chat";
-import { Bot, User, Clock, Wrench } from "lucide-react";
+import { Bot, User, Clock, Wrench, RefreshCw, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -43,9 +44,19 @@ export function ChatMessage({ message }: ChatMessageProps) {
                     "border-0 shadow-sm",
                     isUser
                         ? "bg-blue-500 text-white"
-                        : "bg-muted"
+                        : message.error
+                            ? "bg-red-50 border border-red-200"
+                            : "bg-muted"
                 )}>
                     <CardContent className="p-3">
+                        {/* Error indicator */}
+                        {message.error && (
+                            <div className="flex items-center gap-2 mb-2 text-red-600">
+                                <AlertTriangle className="w-4 h-4" />
+                                <span className="text-xs font-medium">Error</span>
+                            </div>
+                        )}
+
                         <div className="prose prose-sm max-w-none text-sm dark:prose-invert">
                             {isUser ? (
                                 <div className="whitespace-pre-wrap text-white">
@@ -85,6 +96,21 @@ export function ChatMessage({ message }: ChatMessageProps) {
                                 </ReactMarkdown>
                             )}
                         </div>
+
+                        {/* Retry button for error messages */}
+                        {message.error && message.retryHandler && (
+                            <div className="mt-3 pt-2 border-t border-red-200">
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={message.retryHandler}
+                                    className="text-red-600 border-red-200 hover:bg-red-50"
+                                >
+                                    <RefreshCw className="w-3 h-3 mr-1" />
+                                    Retry
+                                </Button>
+                            </div>
+                        )}
 
                         {/* Show attachments if any */}
                         {message.attachments && message.attachments.length > 0 && (

@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { ChatMessage, ChatState, FileAttachment, AgentResponse } from "@/types/chat";
 import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
 import { MessageInput } from "./MessageInput";
-import { Trash2, Bot } from "lucide-react";
+import { Trash2, Bot, Loader2 } from "lucide-react";
 import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:8000';
@@ -147,18 +147,33 @@ export function ChatContainer() {
         } catch (error) {
             console.error('Failed to send message:', error);
 
+            // Create a retry function for this specific message
+            const retryMessage = () => {
+                // Remove the error message and retry
+                setChatState(prev => ({
+                    ...prev,
+                    messages: prev.messages.filter(msg => msg.id !== errorMessageId),
+                    error: undefined
+                }));
+                // Retry the original request
+                handleSendMessage(content, attachments);
+            };
+
+            const errorMessageId = crypto.randomUUID();
             const errorMessage: ChatMessage = {
-                id: crypto.randomUUID(),
-                content: 'Sorry, I encountered an error while processing your message. Please try again.',
+                id: errorMessageId,
+                content: `Sorry, I encountered an error while processing your message. This might be due to network issues or API limits.`,
                 role: 'assistant',
-                timestamp: new Date()
+                timestamp: new Date(),
+                error: true,
+                retryHandler: retryMessage
             };
 
             setChatState(prev => ({
                 ...prev,
                 messages: [...prev.messages, errorMessage],
                 isLoading: false,
-                error: 'Failed to send message'
+                error: 'Failed to send message. You can try again or check your network connection.'
             }));
         }
     };
@@ -236,9 +251,11 @@ export function ChatContainer() {
                             )}
 
                             {chatState.isLoading && (
-                                <div className="flex items-center gap-2 text-muted-foreground">
-                                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                    <span className="text-sm">AgentKit is thinking...</span>
+                                <div className="flex items-center gap-3 text-muted-foreground py-4">
+                                    <div className="flex items-center gap-2">
+                                        <Loader2 className="w-4 h-4 animate-spin" />
+                                        <span className="text-sm">AgentKit is thinking...</span>
+                                    </div>
                                 </div>
                             )}
 

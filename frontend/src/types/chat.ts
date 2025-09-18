@@ -6,6 +6,8 @@ export interface ChatMessage {
     model?: string;
     toolUsed?: string;
     attachments?: FileAttachment[];
+    error?: boolean;
+    retryHandler?: () => void;
 }
 
 export interface FileAttachment {

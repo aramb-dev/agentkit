@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import type { FileAttachment } from "@/types/chat";
-import { Send, Paperclip, X } from "lucide-react";
+import { Send, Paperclip, X, Loader2 } from "lucide-react";
 import { FileUpload } from "./FileUpload";
 
 interface MessageInputProps {
@@ -130,7 +130,7 @@ export function MessageInput({ onSendMessage, isLoading, selectedModel }: Messag
                     className="min-w-[60px]"
                 >
                     {isLoading ? (
-                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <Loader2 className="w-4 h-4 animate-spin" />
                     ) : (
                         <Send className="w-4 h-4" />
                     )}
