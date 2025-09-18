@@ -7,3 +7,6 @@ tavily-python
 PyPDF2
 python-docx
 python-multipart
+pytest
+pytest-asyncio
+httpx

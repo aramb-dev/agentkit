@@ -7,7 +7,9 @@ load_dotenv()
 
 # Configuration from environment variables
 MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", "10485760"))  # 10MB default
-CONVERSATION_HISTORY_LIMIT = int(os.getenv("CONVERSATION_HISTORY_LIMIT", "50"))  # 50 messages default
+CONVERSATION_HISTORY_LIMIT = int(
+    os.getenv("CONVERSATION_HISTORY_LIMIT", "50")
+)  # 50 messages default
 
 # Add the parent directory to Python path so we can import the agent module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -79,12 +81,12 @@ async def chat(
         for file in files:
             if file.filename:
                 content = await file.read()
-                
+
                 # Check file size limit
                 if len(content) > MAX_FILE_SIZE:
                     raise HTTPException(
                         status_code=413,
-                        detail=f"File '{file.filename}' is too large. Maximum size allowed: {MAX_FILE_SIZE / (1024*1024):.1f}MB"
+                        detail=f"File '{file.filename}' is too large. Maximum size allowed: {MAX_FILE_SIZE / (1024*1024):.1f}MB",
                     )
 
                 # Store file permanently
@@ -227,6 +229,36 @@ async def get_file_support():
 @app.get("/healthz")
 def healthz():
     return {"status": "ok", "version": "1.0.0"}
+
+
+@app.get("/status")
+async def get_system_status():
+    """
+    Get comprehensive system status including configuration and capabilities.
+    """
+    return {
+        "status": "operational",
+        "version": "1.0.0",
+        "configuration": {
+            "max_file_size_mb": round(MAX_FILE_SIZE / (1024 * 1024), 1),
+            "conversation_history_limit": CONVERSATION_HISTORY_LIMIT,
+            "google_api_configured": bool(os.getenv("GOOGLE_API_KEY")),
+            "tavily_api_configured": bool(os.getenv("TAVILY_API_KEY")),
+        },
+        "capabilities": {
+            "ai_models": len(llm_client.get_available_models()),
+            "supported_file_formats": list(DocumentProcessor.SUPPORTED_FORMATS.keys()),
+            "missing_dependencies": DocumentProcessor.get_missing_dependencies(),
+        },
+        "endpoints": {
+            "chat": "/chat",
+            "upload": "/chat (with files)",
+            "models": "/models",
+            "files": "/files",
+            "health": "/healthz",
+            "api_docs": "/docs",
+        },
+    }
 
 
 if __name__ == "__main__":
