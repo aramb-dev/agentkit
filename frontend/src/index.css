@@ -3,6 +3,108 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* KaTeX styles for math rendering */
+@import "katex/dist/katex.min.css";
+
+/* Custom prose styles for markdown content */
+.prose {
+  max-width: none;
+  color: inherit;
+}
+
+.prose h1,
+.prose h2,
+.prose h3,
+.prose h4,
+.prose h5,
+.prose h6 {
+  color: inherit;
+  font-weight: 600;
+  margin-top: 1.5em;
+  margin-bottom: 0.5em;
+}
+
+.prose h1 {
+  font-size: 1.5rem;
+}
+.prose h2 {
+  font-size: 1.3rem;
+}
+.prose h3 {
+  font-size: 1.1rem;
+}
+
+.prose p {
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+  line-height: 1.6;
+}
+
+.prose ul,
+.prose ol {
+  margin-top: 0.75em;
+  margin-bottom: 0.75em;
+  padding-left: 1.5em;
+}
+
+.prose li {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
+}
+
+.prose blockquote {
+  border-left: 4px solid #e5e7eb;
+  padding-left: 1em;
+  margin: 1em 0;
+  font-style: italic;
+  color: #6b7280;
+}
+
+.prose table {
+  border-collapse: collapse;
+  margin: 1em 0;
+  width: 100%;
+}
+
+.prose th,
+.prose td {
+  border: 1px solid #e5e7eb;
+  padding: 0.5em;
+  text-align: left;
+}
+
+.prose th {
+  background-color: #f9fafb;
+  font-weight: 600;
+}
+
+.prose a {
+  color: #3b82f6;
+  text-decoration: underline;
+}
+
+.prose a:hover {
+  color: #1d4ed8;
+}
+
+.prose strong {
+  font-weight: 600;
+}
+
+.prose em {
+  font-style: italic;
+}
+
+/* Math expressions */
+.prose .katex {
+  font-size: 1em;
+}
+
+.prose .katex-display {
+  margin: 1em 0;
+  text-align: center;
+}
+
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);

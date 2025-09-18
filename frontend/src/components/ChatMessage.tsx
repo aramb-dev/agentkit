@@ -4,6 +4,11 @@ import { Card, CardContent } from "@/components/ui/card";
 import type { ChatMessage as ChatMessageType } from "@/types/chat";
 import { Bot, User, Clock, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import 'katex/dist/katex.min.css';
 
 interface ChatMessageProps {
     message: ChatMessageType;
@@ -41,8 +46,44 @@ export function ChatMessage({ message }: ChatMessageProps) {
                         : "bg-muted"
                 )}>
                     <CardContent className="p-3">
-                        <div className="whitespace-pre-wrap text-sm">
-                            {message.content}
+                        <div className="prose prose-sm max-w-none text-sm dark:prose-invert">
+                            {isUser ? (
+                                <div className="whitespace-pre-wrap text-white">
+                                    {message.content}
+                                </div>
+                            ) : (
+                                <ReactMarkdown
+                                    remarkPlugins={[remarkGfm, remarkMath]}
+                                    rehypePlugins={[rehypeKatex]}
+                                    components={{
+                                        code({ className, children, ...props }) {
+                                            return (
+                                                <code
+                                                    className={cn(
+                                                        "bg-slate-100 text-slate-800 px-1 py-0.5 rounded text-xs",
+                                                        className
+                                                    )}
+                                                    {...props}
+                                                >
+                                                    {children}
+                                                </code>
+                                            );
+                                        },
+                                        pre({ children, ...props }) {
+                                            return (
+                                                <pre
+                                                    className="bg-slate-100 text-slate-800 p-3 rounded-md overflow-x-auto text-xs"
+                                                    {...props}
+                                                >
+                                                    {children}
+                                                </pre>
+                                            );
+                                        }
+                                    }}
+                                >
+                                    {message.content}
+                                </ReactMarkdown>
+                            )}
                         </div>
 
                         {/* Show attachments if any */}
