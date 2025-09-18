@@ -15,6 +15,7 @@ from typing import List, Optional, Dict, Any
 from agent.agent import run_agent_with_history
 from agent.llm_client import llm_client
 from agent.document_processor import DocumentProcessor
+from agent.file_manager import file_manager
 
 app = FastAPI(title="AgentKit Chat API", version="1.0.0")
 
@@ -65,20 +66,32 @@ async def chat(
 
     # Process uploaded files if any
     processed_files = []
+    stored_files = []
+
     if files and files[0].filename:  # Check if files were actually uploaded
         for file in files:
             if file.filename:
                 content = await file.read()
 
-                # Use enhanced document processor
+                # Store file permanently
+                file_metadata = await file_manager.store_file(
+                    content,
+                    file.filename,
+                    file.content_type or "application/octet-stream",
+                    user_id="default",  # TODO: Add proper user management
+                )
+                stored_files.append(file_metadata)
+
+                # Process file content for immediate use
                 file_result = await DocumentProcessor.process_file(
                     content,
                     file.filename,
                     file.content_type or "application/octet-stream",
                 )
-                processed_files.append(file_result)
-
-    # Create document summary for the agent
+                file_result["file_id"] = file_metadata["file_id"]  # Link to stored file
+                processed_files.append(
+                    file_result
+                )  # Create document summary for the agent
     document_summary = DocumentProcessor.create_document_summary(processed_files)
 
     # Combine user message with document content
@@ -102,6 +115,19 @@ async def chat(
     response = await run_agent_with_history(
         message_with_files, model, conversation_history
     )
+
+    # Add stored file information to response
+    if stored_files:
+        response["stored_files"] = [
+            {
+                "file_id": f["file_id"],
+                "original_filename": f["original_filename"],
+                "file_size": f["file_size"],
+                "content_type": f["content_type"],
+            }
+            for f in stored_files
+        ]
+
     return response
 
 
@@ -114,6 +140,51 @@ async def get_models():
     default_model = llm_client.get_default_model()
 
     return ModelResponse(available_models=available_models, default_model=default_model)
+
+
+@app.get("/files")
+async def list_files(user_id: Optional[str] = None):
+    """List all uploaded files."""
+    files = file_manager.list_user_files(user_id)
+    return {"files": files, "total": len(files)}
+
+
+@app.get("/files/{file_id}")
+async def get_file_info(file_id: str):
+    """Get information about a specific file."""
+    metadata = file_manager.get_file_metadata(file_id)
+    if not metadata:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=404, detail="File not found")
+    return metadata
+
+
+@app.delete("/files/{file_id}")
+async def delete_file(file_id: str):
+    """Delete a specific file."""
+    success = file_manager.delete_file(file_id)
+    if not success:
+        from fastapi import HTTPException
+
+        raise HTTPException(
+            status_code=404, detail="File not found or could not be deleted"
+        )
+    return {"message": "File deleted successfully"}
+
+
+@app.get("/storage/stats")
+async def get_storage_stats():
+    """Get storage usage statistics."""
+    stats = file_manager.get_storage_stats()
+    return stats
+
+
+@app.post("/storage/cleanup")
+async def cleanup_old_files(days_old: int = 30):
+    """Clean up files older than specified days."""
+    deleted_count = file_manager.cleanup_old_files(days_old)
+    return {"message": f"Deleted {deleted_count} old files"}
 
 
 @app.get("/file-support")

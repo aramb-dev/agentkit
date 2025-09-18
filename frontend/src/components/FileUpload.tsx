@@ -29,7 +29,9 @@ export function FileUpload({
             name: file.name,
             size: file.size,
             type: file.type,
-            uploadProgress: 0
+            uploadProgress: 0,
+            file: file, // Store the actual File object
+            uploaded: false
         }));
 
         onFilesAdded(newFiles);

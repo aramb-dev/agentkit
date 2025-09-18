@@ -88,10 +88,9 @@ export function ChatContainer() {
 
             // Add files to form data
             for (const attachment of attachments) {
-                if (attachment.url) {
-                    // If we have a file URL, we'd need to fetch the file
-                    // For now, we'll just send file info
-                    formData.append('files', new Blob([`File: ${attachment.name}`]), attachment.name);
+                if (attachment.file) {
+                    // Send the actual File object
+                    formData.append('files', attachment.file, attachment.name);
                 }
             }
 
@@ -109,6 +108,35 @@ export function ChatContainer() {
                 model: response.data.model,
                 toolUsed: response.data.tool_used
             };
+
+            // Update attachment file IDs with server response
+            if (response.data.stored_files) {
+                const updatedAttachments = attachments.map(attachment => {
+                    const storedFile = response.data.stored_files?.find(
+                        sf => sf.original_filename === attachment.name
+                    );
+                    if (storedFile) {
+                        return {
+                            ...attachment,
+                            fileId: storedFile.file_id,
+                            uploaded: true,
+                            uploadProgress: 100
+                        };
+                    }
+                    return attachment;
+                });
+
+                // Update the user message with the file IDs
+                setChatState(prev => ({
+                    ...prev,
+                    messages: prev.messages.map(msg =>
+                        msg.id === userMessage.id
+                            ? { ...msg, attachments: updatedAttachments }
+                            : msg
+                    ),
+                    isLoading: false
+                }));
+            }
 
             setChatState(prev => ({
                 ...prev,

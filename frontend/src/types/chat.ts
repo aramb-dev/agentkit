@@ -15,6 +15,9 @@ export interface FileAttachment {
     type: string;
     url?: string;
     uploadProgress?: number;
+    file?: File; // Original browser File object
+    fileId?: string; // Server-side stored file ID
+    uploaded?: boolean; // Whether file has been uploaded to server
 }
 
 export interface ChatState {
@@ -32,4 +35,10 @@ export interface AgentResponse {
     model: string;
     context: string;
     summary: string;
+    stored_files?: Array<{
+        file_id: string;
+        original_filename: string;
+        file_size: number;
+        content_type: string;
+    }>;
 }
