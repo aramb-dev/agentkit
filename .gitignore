@@ -4,6 +4,10 @@
 *.db
 assets/external/
 uploads/
+test_docs/
+create_test_pdf.py
+test_*.txt
+*.pdf
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
