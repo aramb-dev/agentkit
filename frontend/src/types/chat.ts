@@ -20,6 +20,8 @@ export interface FileAttachment {
     file?: File; // Original browser File object
     fileId?: string; // Server-side stored file ID
     uploaded?: boolean; // Whether file has been uploaded to server
+    ingested?: boolean; // Whether file has been processed for RAG
+    ingestProgress?: number; // RAG ingestion progress
 }
 
 export interface ChatState {
@@ -27,6 +29,8 @@ export interface ChatState {
     isLoading: boolean;
     selectedModel: string;
     availableModels: string[];
+    namespace: string; // RAG namespace for document isolation
+    sessionId: string; // Session ID for conversation context
     error?: string;
 }
 
@@ -43,4 +47,13 @@ export interface AgentResponse {
         file_size: number;
         content_type: string;
     }>;
+}
+
+export interface DocumentIngestResponse {
+    status: string;
+    message: string;
+    chunks: number;
+    namespace: string;
+    filename: string;
+    doc_id: string;
 }

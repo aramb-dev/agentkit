@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import type { ChatMessage, ChatState, FileAttachment, AgentResponse } from "@/types/chat";
+import type { ChatMessage, ChatState, FileAttachment, AgentResponse, DocumentIngestResponse } from "@/types/chat";
 import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
 import { MessageInput } from "./MessageInput";
 import { Trash2, Bot, Loader2 } from "lucide-react";
@@ -16,6 +16,8 @@ export function ChatContainer() {
         isLoading: false,
         selectedModel: 'gemini-1.5-flash',
         availableModels: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'],
+        namespace: 'default',
+        sessionId: crypto.randomUUID(),
         error: undefined
     });
 
@@ -54,6 +56,59 @@ export function ChatContainer() {
         loadModels();
     }, []);
 
+    // Function to ingest PDF documents for RAG
+    const ingestDocument = async (file: File): Promise<boolean> => {
+        try {
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('namespace', chatState.namespace);
+            formData.append('session_id', chatState.sessionId);
+
+            const response = await axios.post<DocumentIngestResponse>(`${API_BASE_URL}/docs/ingest`, formData, {
+                headers: {
+                    'Content-Type': 'multipart/form-data',
+                },
+            });
+
+            if (response.data.status === 'success') {
+                // Show success message
+                const ingestMessage: ChatMessage = {
+                    id: crypto.randomUUID(),
+                    content: `✅ Successfully ingested **${file.name}** for RAG retrieval!\n\n📊 **Document processed:** ${response.data.chunks} chunks created\n🏷️ **Namespace:** ${response.data.namespace}\n\nYou can now ask questions about this document and I'll retrieve relevant information from it.`,
+                    role: 'assistant',
+                    timestamp: new Date(),
+                    toolUsed: 'rag'
+                };
+
+                setChatState(prev => ({
+                    ...prev,
+                    messages: [...prev.messages, ingestMessage]
+                }));
+
+                return true;
+            }
+            return false;
+        } catch (error) {
+            console.error('Document ingestion failed:', error);
+
+            // Show error message
+            const errorMessage: ChatMessage = {
+                id: crypto.randomUUID(),
+                content: `❌ Failed to ingest **${file.name}** for RAG retrieval.\n\nThis could be due to:\n- Unsupported file format (only PDFs supported currently)\n- File size too large\n- Network issues\n\nYou can still upload the file for immediate processing, but it won't be available for future retrieval.`,
+                role: 'assistant',
+                timestamp: new Date(),
+                error: true
+            };
+
+            setChatState(prev => ({
+                ...prev,
+                messages: [...prev.messages, errorMessage]
+            }));
+
+            return false;
+        }
+    };
+
     const handleSendMessage = async (content: string, attachments: FileAttachment[]) => {
         if (!content.trim() && attachments.length === 0) return;
 
@@ -72,11 +127,28 @@ export function ChatContainer() {
             error: undefined
         }));
 
+        // Process PDF attachments for RAG ingestion
+        const updatedAttachments = [...attachments];
+        for (let i = 0; i < attachments.length; i++) {
+            const attachment = attachments[i];
+            if (attachment.file && attachment.type === 'application/pdf') {
+                updatedAttachments[i] = { ...attachment, ingestProgress: 0 };
+                const ingested = await ingestDocument(attachment.file);
+                updatedAttachments[i] = {
+                    ...updatedAttachments[i],
+                    ingested,
+                    ingestProgress: ingested ? 100 : 0
+                };
+            }
+        }
+
         try {
             // Prepare form data for file uploads
             const formData = new FormData();
             formData.append('message', content);
             formData.append('model', chatState.selectedModel);
+            formData.append('namespace', chatState.namespace);
+            formData.append('session_id', chatState.sessionId);
 
             // Add conversation history (last 10 messages for context)
             const historyForContext = chatState.messages.slice(-10).map(msg => ({
@@ -111,7 +183,7 @@ export function ChatContainer() {
 
             // Update attachment file IDs with server response
             if (response.data.stored_files) {
-                const updatedAttachments = attachments.map(attachment => {
+                const finalAttachments = updatedAttachments.map(attachment => {
                     const storedFile = response.data.stored_files?.find(
                         sf => sf.original_filename === attachment.name
                     );
@@ -131,7 +203,7 @@ export function ChatContainer() {
                     ...prev,
                     messages: prev.messages.map(msg =>
                         msg.id === userMessage.id
-                            ? { ...msg, attachments: updatedAttachments }
+                            ? { ...msg, attachments: finalAttachments }
                             : msg
                     ),
                     isLoading: false
