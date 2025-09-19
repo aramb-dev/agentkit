@@ -22,6 +22,10 @@ from agent.agent import run_agent_with_history
 from agent.llm_client import llm_client
 from agent.document_processor import DocumentProcessor
 from agent.file_manager import file_manager
+import uuid
+import tempfile
+from rag.ingest import build_doc_chunks
+from rag.store import upsert_chunks
 
 app = FastAPI(title="AgentKit Chat API", version="1.0.0")
 
@@ -58,9 +62,12 @@ async def chat(
     model: str = Form(...),
     history: str = Form(default="[]"),  # JSON string of message history
     files: List[UploadFile] = File(default=[]),
+    namespace: str = Form(default="default"),  # RAG namespace for document isolation
+    session_id: str = Form(default="default"),  # Session ID for conversation context
 ):
     """
     Send a chat message to AgentKit with optional file attachments and conversation history.
+    Supports RAG retrieval from previously ingested documents using namespace isolation.
     """
     import json
 
@@ -129,7 +136,7 @@ async def chat(
         message_with_files = message
 
     response = await run_agent_with_history(
-        message_with_files, model, conversation_history
+        message_with_files, model, conversation_history, namespace, session_id
     )
 
     # Add stored file information to response
@@ -156,6 +163,78 @@ async def get_models():
     default_model = llm_client.get_default_model()
 
     return ModelResponse(available_models=available_models, default_model=default_model)
+
+
+@app.post("/docs/ingest")
+async def ingest_doc(
+    file: UploadFile = File(...),
+    namespace: str = Form("default"),
+    session_id: str = Form("default"),
+):
+    """
+    Ingest a document into the vector store for RAG retrieval.
+
+    This endpoint processes uploaded files (especially PDFs) by:
+    1. Extracting text content
+    2. Chunking the text into searchable segments
+    3. Generating embeddings and storing in vector database
+    4. Associating chunks with namespace for isolation
+    """
+    # Validate file type
+    if not file.filename or not file.filename.lower().endswith(".pdf"):
+        raise HTTPException(
+            status_code=400,
+            detail="Currently only PDF files are supported for RAG ingestion",
+        )
+
+    # Check file size
+    content = await file.read()
+    if len(content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large. Maximum size: {MAX_FILE_SIZE / (1024*1024):.1f}MB",
+        )
+
+    # Save temporary file for processing
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+        tmp_file.write(content)
+        tmp_path = tmp_file.name
+
+    try:
+        # Build document chunks with metadata
+        chunks = build_doc_chunks(
+            tmp_path,
+            metadata={
+                "filename": file.filename,
+                "namespace": namespace,
+                "session_id": session_id,
+                "doc_id": str(uuid.uuid4()),
+            },
+        )
+
+        # Store chunks in vector database
+        upsert_chunks(namespace, chunks)
+
+        return {
+            "status": "success",
+            "message": "Document ingested successfully",
+            "chunks": len(chunks),
+            "namespace": namespace,
+            "filename": file.filename,
+            "doc_id": chunks[0]["metadata"]["doc_id"] if chunks else None,
+        }
+
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to process document: {str(e)}"
+        )
+
+    finally:
+        # Clean up temporary file
+        try:
+            os.unlink(tmp_path)
+        except:
+            pass
 
 
 @app.get("/files")

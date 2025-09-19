@@ -68,7 +68,11 @@ def _summarise(history: List[Message], final_answer: str) -> str:
 
 
 async def run_agent_with_history(
-    message: str, model: str, conversation_history: List[Dict]
+    message: str,
+    model: str,
+    conversation_history: List[Dict],
+    namespace: str = "default",
+    session_id: str = "default",
 ) -> Dict[str, str]:
     """Entry point used by the FastAPI app with conversation history support."""
 
@@ -88,7 +92,14 @@ async def run_agent_with_history(
         f"Recent conversation:\n{recent_context}\n\nCurrent message: {message}"
     )
     tool = TOOLS[tool_name]
-    tool_output = await tool.run(message)
+
+    # Handle RAG tool with namespace parameter
+    if tool_name == "rag":
+        from .tools import _retrieve_context
+
+        tool_output = _retrieve_context(message, namespace=namespace)
+    else:
+        tool_output = await tool.run(message)
 
     if tool_name != "idle" and tool_output:
         history.append(Message(role="tool", content=f"{tool_name}: {tool_output}"))

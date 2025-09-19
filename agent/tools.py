@@ -14,6 +14,15 @@ from tavily import TavilyClient
 # Load environment variables
 load_dotenv()
 
+# Import RAG functionality
+try:
+    from rag.store import query as vector_query
+
+    RAG_AVAILABLE = True
+except ImportError:
+    vector_query = None
+    RAG_AVAILABLE = False
+
 
 ToolFn = Callable[[str], "ToolResult"]
 ToolResult = str | Awaitable[str]
@@ -112,8 +121,45 @@ def _fallback_web_search(query: str) -> str:
     return f"Search results for '{query}' (as of {timestamp}):\n\n• {headline}\n\n[Note: This is simulated search data - Tavily API not available]"
 
 
-def _retrieve_context(query: str) -> str:
-    """Retrieve documentation with more detailed context."""
+def _retrieve_context(query: str, namespace: str = "default", k: int = 5) -> str:
+    """Retrieve relevant document chunks using vector search."""
+    if not RAG_AVAILABLE or vector_query is None:
+        return _fallback_rag_search(query)
+
+    try:
+        hits = vector_query(namespace, query, k=k)
+        if not hits:
+            return f"[RAG] No relevant documents found in namespace '{namespace}' for query: '{query}'\n\nThis could mean:\n1. No documents have been ingested yet\n2. The documents don't contain relevant information\n3. Try a different search term or upload relevant documents first"
+
+        # Format results for the LLM
+        lines = []
+        for i, h in enumerate(hits, 1):
+            src = h["metadata"].get("filename", "unknown")
+            chunk_num = h["metadata"].get("chunk", "?")
+            distance = h.get("distance", "N/A")
+
+            # Truncate text for manageable context
+            text = h["text"][:600]
+            if len(h["text"]) > 600:
+                text += "..."
+
+            lines.append(f"**Document {i}: {src} (chunk #{chunk_num})**\n{text}")
+
+        timestamp = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        result = (
+            f"RAG search results for '{query}' in namespace '{namespace}' (as of {timestamp}):\n\n"
+            + "\n\n".join(lines)
+        )
+
+        return result
+
+    except Exception as e:
+        print(f"RAG search error: {e}")
+        return f"[RAG] Error retrieving documents: {str(e)}\n\nFalling back to general knowledge."
+
+
+def _fallback_rag_search(query: str) -> str:
+    """Fallback when RAG system is not available."""
     docs = {
         "architecture": """AgentKit Architecture Overview:
 - Router: Analyzes user queries and selects appropriate tools based on keyword matching
@@ -140,9 +186,12 @@ def _retrieve_context(query: str) -> str:
             matched_docs.append(f"=== {key.title()} ===\n{content}")
 
     if matched_docs:
-        return "\n\n".join(matched_docs)
+        return (
+            "\n\n".join(matched_docs)
+            + "\n\n[Note: Using fallback documentation - RAG system not available]"
+        )
 
-    return f"No specific documentation found for '{query}'. Available topics: architecture, memory, setup"
+    return f"No specific documentation found for '{query}'. Available topics: architecture, memory, setup\n\n[Note: RAG system not available - upload documents via /docs/ingest for better results]"
 
 
 def _memory_lookup(query: str) -> str:
@@ -159,6 +208,11 @@ def _memory_lookup(query: str) -> str:
         return f"[{now} UTC] Memory operation: {query}\n\nMemory system is ready to store or recall information."
 
 
+def _rag_wrapper(query: str) -> str:
+    """Wrapper for RAG that uses default namespace - will be overridden by agent."""
+    return _retrieve_context(query, namespace="default")
+
+
 def _idle(query: str) -> str:
     """Provide helpful fallback response when no specialized tool is relevant."""
     return f"I understand you said: '{query}'. While I don't have a specialized tool for this, I'm here to help with web searches, document explanations, or memory functions."
@@ -172,8 +226,8 @@ TOOLS: Dict[str, Tool] = {
     ),
     "rag": Tool(
         name="rag",
-        description="Retrieve documentation and explanations about AgentKit architecture and features",
-        fn=_retrieve_context,
+        description="Retrieve information from uploaded documents using vector search and semantic similarity",
+        fn=_rag_wrapper,
     ),
     "memory": Tool(
         name="memory",
