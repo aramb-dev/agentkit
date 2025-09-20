@@ -22,6 +22,10 @@ export interface FileAttachment {
     uploaded?: boolean; // Whether file has been uploaded to server
     ingested?: boolean; // Whether file has been processed for RAG
     ingestProgress?: number; // RAG ingestion progress
+    ingestStage?: 'uploading' | 'processing' | 'embedding' | 'complete' | 'error'; // Current processing stage
+    ingestError?: string; // Error message if ingestion fails
+    processingStartTime?: Date; // When processing started
+    chunksCreated?: number; // Number of chunks created during processing
 }
 
 export interface ChatState {

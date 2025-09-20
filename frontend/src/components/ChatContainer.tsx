@@ -11,6 +11,7 @@ import axios from 'axios';
 const API_BASE_URL = 'http://localhost:8000';
 
 export function ChatContainer() {
+    // const { addToast } = useToast();
     const [chatState, setChatState] = useState<ChatState>({
         messages: [],
         isLoading: false,
@@ -56,25 +57,55 @@ export function ChatContainer() {
         loadModels();
     }, []);
 
-    // Function to ingest PDF documents for RAG
-    const ingestDocument = async (file: File): Promise<boolean> => {
+    // Function to ingest PDF documents for RAG with enhanced progress tracking
+    const ingestDocument = async (file: File, onProgressUpdate?: (stage: "uploading" | "processing" | "embedding" | "complete" | "error", progress: number) => void): Promise<boolean> => {
         try {
+            onProgressUpdate?.('uploading', 10);
+            
             const formData = new FormData();
             formData.append('file', file);
             formData.append('namespace', chatState.namespace);
             formData.append('session_id', chatState.sessionId);
 
+            onProgressUpdate?.('processing', 30);
+
             const response = await axios.post<DocumentIngestResponse>(`${API_BASE_URL}/docs/ingest`, formData, {
                 headers: {
                     'Content-Type': 'multipart/form-data',
                 },
+                onUploadProgress: (progressEvent) => {
+                    if (progressEvent.total) {
+                        const uploadProgress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                        onProgressUpdate?.('uploading', Math.min(uploadProgress, 25));
+                    }
+                }
             });
 
+            onProgressUpdate?.('embedding', 70);
+
             if (response.data.status === 'success') {
-                // Show success message
+                onProgressUpdate?.('complete', 100);
+                
+                // Show toast notification for success
+                // addToast({
+                //     type: 'success',
+                //     title: '🎉 Document processed successfully!',
+                //     description: `${file.name} is ready for RAG queries (${response.data.chunks} chunks created)`,
+                //     duration: 4000
+                // });
+                
+                // Show enhanced success message with more details
                 const ingestMessage: ChatMessage = {
                     id: crypto.randomUUID(),
-                    content: `✅ Successfully ingested **${file.name}** for RAG retrieval!\n\n📊 **Document processed:** ${response.data.chunks} chunks created\n🏷️ **Namespace:** ${response.data.namespace}\n\nYou can now ask questions about this document and I'll retrieve relevant information from it.`,
+                    content: `✅ **Successfully processed ${file.name}!**
+
+📊 **Processing Results:**
+• **Chunks created:** ${response.data.chunks}
+• **Document ID:** ${response.data.doc_id?.substring(0, 8)}...
+• **Namespace:** ${response.data.namespace}
+• **File size:** ${(file.size / 1024 / 1024).toFixed(2)} MB
+
+🚀 **Ready for RAG retrieval!** You can now ask questions about this document and I'll retrieve relevant information from it.`,
                     role: 'assistant',
                     timestamp: new Date(),
                     toolUsed: 'rag'
@@ -90,11 +121,58 @@ export function ChatContainer() {
             return false;
         } catch (error) {
             console.error('Document ingestion failed:', error);
+            
+            onProgressUpdate?.('error', 0);
 
-            // Show error message
+            // Show toast notification for error
+            // let errorTitle = 'Document processing failed';
+            // let errorDescription = `Failed to process ${file.name}`;
+            
+            // if (axios.isAxiosError(error)) {
+            //     if (error.response?.status === 413) {
+            //         errorTitle = 'File too large';
+            //         errorDescription = 'Maximum file size is 10MB';
+            //     } else if (error.response?.status === 400) {
+            //         errorTitle = 'Unsupported format';
+            //         errorDescription = 'Only PDF files are supported';
+            //     } else if (error.code === 'NETWORK_ERROR') {
+            //         errorTitle = 'Network error';
+            //         errorDescription = 'Check your internet connection';
+            //     }
+            // }
+            
+            // addToast({
+            //     type: 'error',
+            //     title: errorTitle,
+            //     description: errorDescription,
+            //     duration: 6000
+            // });
+
+            // Enhanced error message with better categorization
+            let errorDetails = '';
+            if (axios.isAxiosError(error)) {
+                if (error.response?.status === 413) {
+                    errorDetails = '\n**Reason:** File size too large (max 10MB allowed)';
+                } else if (error.response?.status === 400) {
+                    errorDetails = '\n**Reason:** Unsupported file format (only PDFs supported)';
+                } else if (error.code === 'NETWORK_ERROR') {
+                    errorDetails = '\n**Reason:** Network connection issue';
+                } else {
+                    errorDetails = '\n**Reason:** Server processing error';
+                }
+            }
+
             const errorMessage: ChatMessage = {
                 id: crypto.randomUUID(),
-                content: `❌ Failed to ingest **${file.name}** for RAG retrieval.\n\nThis could be due to:\n- Unsupported file format (only PDFs supported currently)\n- File size too large\n- Network issues\n\nYou can still upload the file for immediate processing, but it won't be available for future retrieval.`,
+                content: `❌ **Failed to process ${file.name}**${errorDetails}
+
+🔧 **What you can try:**
+• Check file format (PDFs work best)
+• Ensure file size is under 10MB
+• Check your internet connection
+• Try uploading again
+
+💡 **Note:** You can still attach the file for immediate processing, but it won't be available for future document retrieval.`,
                 role: 'assistant',
                 timestamp: new Date(),
                 error: true
@@ -127,18 +205,63 @@ export function ChatContainer() {
             error: undefined
         }));
 
-        // Process PDF attachments for RAG ingestion
+        // Process PDF attachments for RAG ingestion with enhanced progress tracking
         const updatedAttachments = [...attachments];
         for (let i = 0; i < attachments.length; i++) {
             const attachment = attachments[i];
             if (attachment.file && attachment.type === 'application/pdf') {
-                updatedAttachments[i] = { ...attachment, ingestProgress: 0 };
-                const ingested = await ingestDocument(attachment.file);
-                updatedAttachments[i] = {
-                    ...updatedAttachments[i],
-                    ingested,
-                    ingestProgress: ingested ? 100 : 0
+                // Initialize processing state
+                updatedAttachments[i] = { 
+                    ...attachment, 
+                    ingestProgress: 0,
+                    ingestStage: 'uploading',
+                    processingStartTime: new Date()
                 };
+
+                // Create progress update callback
+                const updateProgress = (stage: 'uploading' | 'processing' | 'embedding' | 'complete' | 'error', progress: number) => {
+                    setChatState(prev => ({
+                        ...prev,
+                        messages: prev.messages.map(msg =>
+                            msg.id === userMessage.id && msg.attachments
+                                ? {
+                                    ...msg,
+                                    attachments: msg.attachments.map(att =>
+                                        att.id === attachment.id
+                                            ? { 
+                                                ...att, 
+                                                ingestProgress: progress,
+                                                ingestStage: stage,
+                                                ...(stage === 'error' && { ingestError: 'Processing failed' })
+                                            }
+                                            : att
+                                    )
+                                }
+                                : msg
+                        )
+                    }));
+                };
+
+                try {
+                    const ingested = await ingestDocument(attachment.file, updateProgress);
+                    
+                    // Final state update
+                    updatedAttachments[i] = {
+                        ...updatedAttachments[i],
+                        ingested,
+                        ingestProgress: ingested ? 100 : 0,
+                        ingestStage: ingested ? 'complete' : 'error',
+                        ...(ingested && { chunksCreated: 0 }) // This would be populated from response
+                    };
+                } catch (error) {
+                    updatedAttachments[i] = {
+                        ...updatedAttachments[i],
+                        ingested: false,
+                        ingestProgress: 0,
+                        ingestStage: 'error',
+                        ingestError: 'Processing failed'
+                    };
+                }
             }
         }
 
