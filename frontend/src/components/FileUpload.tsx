@@ -3,8 +3,9 @@ import { useDropzone } from 'react-dropzone';
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Progress } from "@/components/ui/progress";
 import type { FileAttachment } from "@/types/chat";
-import { Upload, X, CheckCircle, AlertCircle } from "lucide-react";
+import { Upload, X, CheckCircle, AlertCircle, Loader2, FileText, Database } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface FileUploadProps {
@@ -125,17 +126,71 @@ export function FileUpload({
                                         </p>
                                     </div>
 
-                                    {/* Upload status */}
-                                    {file.uploadProgress !== undefined && (
-                                        <div className="flex items-center gap-1">
-                                            {file.uploadProgress === 100 ? (
+                                    {/* Enhanced upload and processing status */}
+                                    {(file.uploadProgress !== undefined || file.ingestStage) && (
+                                        <div className="flex flex-col gap-2 min-w-32">
+                                            {/* Upload Progress */}
+                                            {file.uploadProgress !== undefined && file.uploadProgress < 100 && (
+                                                <div className="flex items-center gap-2">
+                                                    <Loader2 className="w-3 h-3 animate-spin text-blue-500" />
+                                                    <div className="flex-1">
+                                                        <Progress value={file.uploadProgress} className="h-2" />
+                                                    </div>
+                                                    <Badge variant="secondary" className="text-xs">
+                                                        {file.uploadProgress}%
+                                                    </Badge>
+                                                </div>
+                                            )}
+
+                                            {/* Processing Stages */}
+                                            {file.ingestStage && file.ingestStage !== 'complete' && file.ingestStage !== 'error' && (
+                                                <div className="flex items-center gap-2">
+                                                    {file.ingestStage === 'processing' && (
+                                                        <>
+                                                            <FileText className="w-3 h-3 animate-pulse text-orange-500" />
+                                                            <span className="text-xs text-orange-600">Processing document...</span>
+                                                        </>
+                                                    )}
+                                                    {file.ingestStage === 'embedding' && (
+                                                        <>
+                                                            <Database className="w-3 h-3 animate-pulse text-purple-500" />
+                                                            <span className="text-xs text-purple-600">Creating embeddings...</span>
+                                                        </>
+                                                    )}
+                                                    {file.ingestProgress !== undefined && (
+                                                        <Badge variant="secondary" className="text-xs">
+                                                            {file.ingestProgress}%
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* Success State */}
+                                            {file.ingestStage === 'complete' && (
+                                                <div className="flex items-center gap-2">
+                                                    <CheckCircle className="w-4 h-4 text-green-500" />
+                                                    <span className="text-xs text-green-600">
+                                                        Ready for RAG {file.chunksCreated && `(${file.chunksCreated} chunks)`}
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {/* Error State */}
+                                            {file.ingestStage === 'error' && (
+                                                <div className="flex items-center gap-2">
+                                                    <AlertCircle className="w-4 h-4 text-red-500" />
+                                                    <span className="text-xs text-red-600">
+                                                        {file.ingestError || 'Processing failed'}
+                                                    </span>
+                                                </div>
+                                            )}
+
+                                            {/* Simple fallback for legacy progress */}
+                                            {!file.ingestStage && file.uploadProgress === 100 && (
                                                 <CheckCircle className="w-4 h-4 text-green-500" />
-                                            ) : file.uploadProgress === -1 ? (
+                                            )}
+                                            {!file.ingestStage && file.uploadProgress === -1 && (
                                                 <AlertCircle className="w-4 h-4 text-red-500" />
-                                            ) : (
-                                                <Badge variant="secondary" className="text-xs">
-                                                    {file.uploadProgress}%
-                                                </Badge>
                                             )}
                                         </div>
                                     )}
