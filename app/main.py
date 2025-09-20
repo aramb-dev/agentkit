@@ -25,7 +25,7 @@ from agent.file_manager import file_manager
 import uuid
 import tempfile
 from rag.ingest import build_doc_chunks
-from rag.store import upsert_chunks
+from rag.store import upsert_chunks, list_collections, delete_namespace, get_collection
 
 app = FastAPI(title="AgentKit Chat API", version="1.0.0")
 
@@ -303,6 +303,231 @@ async def get_file_support():
             ),
         },
     }
+
+
+# Namespace Management Endpoints
+
+@app.get("/namespaces")
+async def list_namespaces():
+    """List all available namespaces/collections."""
+    try:
+        namespaces = list_collections()
+        # Always include 'default' namespace even if no documents are in it
+        if "default" not in namespaces:
+            namespaces.append("default")
+        
+        # Get document count for each namespace
+        namespace_info = []
+        for namespace in sorted(namespaces):
+            try:
+                collection = get_collection(namespace)
+                count = collection.count()
+                namespace_info.append({
+                    "name": namespace,
+                    "document_count": count,
+                    "is_default": namespace == "default"
+                })
+            except Exception as e:
+                print(f"Error getting count for namespace {namespace}: {e}")
+                namespace_info.append({
+                    "name": namespace,
+                    "document_count": 0,
+                    "is_default": namespace == "default"
+                })
+        
+        return {
+            "namespaces": namespace_info,
+            "total": len(namespace_info)
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to list namespaces: {str(e)}"
+        )
+
+
+@app.post("/namespaces")
+async def create_namespace(name: str = Form(...)):
+    """Create a new namespace."""
+    # Validate namespace name
+    if not name or not name.strip():
+        raise HTTPException(
+            status_code=400, detail="Namespace name cannot be empty"
+        )
+    
+    name = name.strip()
+    
+    # Check for invalid characters
+    import re
+    if not re.match(r'^[a-zA-Z0-9_-]+$', name):
+        raise HTTPException(
+            status_code=400, 
+            detail="Namespace name can only contain letters, numbers, underscores, and hyphens"
+        )
+    
+    # Check if namespace already exists
+    existing_namespaces = list_collections()
+    if name in existing_namespaces:
+        raise HTTPException(
+            status_code=409, detail=f"Namespace '{name}' already exists"
+        )
+    
+    try:
+        # Create the namespace by getting a collection (this creates it)
+        get_collection(name)
+        return {
+            "status": "success",
+            "message": f"Namespace '{name}' created successfully",
+            "namespace": name
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to create namespace: {str(e)}"
+        )
+
+
+@app.delete("/namespaces/{namespace_name}")
+async def delete_namespace_endpoint(namespace_name: str):
+    """Delete a namespace and all its documents."""
+    # Prevent deletion of default namespace
+    if namespace_name == "default":
+        raise HTTPException(
+            status_code=400, detail="Cannot delete the default namespace"
+        )
+    
+    # Check if namespace exists
+    existing_namespaces = list_collections()
+    if namespace_name not in existing_namespaces:
+        raise HTTPException(
+            status_code=404, detail=f"Namespace '{namespace_name}' not found"
+        )
+    
+    try:
+        delete_namespace(namespace_name)
+        return {
+            "status": "success",
+            "message": f"Namespace '{namespace_name}' deleted successfully"
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to delete namespace: {str(e)}"
+        )
+
+
+@app.put("/namespaces/{old_name}/rename")
+async def rename_namespace(old_name: str, new_name: str = Form(...)):
+    """Rename a namespace."""
+    # Validate new namespace name
+    if not new_name or not new_name.strip():
+        raise HTTPException(
+            status_code=400, detail="New namespace name cannot be empty"
+        )
+    
+    new_name = new_name.strip()
+    
+    # Check for invalid characters
+    import re
+    if not re.match(r'^[a-zA-Z0-9_-]+$', new_name):
+        raise HTTPException(
+            status_code=400, 
+            detail="Namespace name can only contain letters, numbers, underscores, and hyphens"
+        )
+    
+    # Prevent renaming default namespace
+    if old_name == "default":
+        raise HTTPException(
+            status_code=400, detail="Cannot rename the default namespace"
+        )
+    
+    # Check if old namespace exists
+    existing_namespaces = list_collections()
+    if old_name not in existing_namespaces:
+        raise HTTPException(
+            status_code=404, detail=f"Namespace '{old_name}' not found"
+        )
+    
+    # Check if new name already exists
+    if new_name in existing_namespaces:
+        raise HTTPException(
+            status_code=409, detail=f"Namespace '{new_name}' already exists"
+        )
+    
+    try:
+        # ChromaDB doesn't support renaming collections directly
+        # We need to copy all documents to new collection and delete old one
+        from rag.store import query
+        
+        # Get all documents from old namespace
+        old_collection = get_collection(old_name)
+        all_docs = old_collection.get()
+        
+        if all_docs["ids"]:
+            # Create new collection and add all documents
+            new_collection = get_collection(new_name)
+            new_collection.upsert(
+                ids=all_docs["ids"],
+                embeddings=all_docs["embeddings"],
+                metadatas=all_docs["metadatas"],
+                documents=all_docs["documents"]
+            )
+        
+        # Delete old namespace
+        delete_namespace(old_name)
+        
+        return {
+            "status": "success",
+            "message": f"Namespace renamed from '{old_name}' to '{new_name}'",
+            "old_name": old_name,
+            "new_name": new_name
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to rename namespace: {str(e)}"
+        )
+
+
+@app.get("/namespaces/{namespace_name}/documents")
+async def list_namespace_documents(namespace_name: str):
+    """List all documents in a specific namespace."""
+    # Check if namespace exists
+    existing_namespaces = list_collections()
+    if namespace_name not in existing_namespaces and namespace_name != "default":
+        raise HTTPException(
+            status_code=404, detail=f"Namespace '{namespace_name}' not found"
+        )
+    
+    try:
+        collection = get_collection(namespace_name)
+        all_docs = collection.get()
+        
+        # Group documents by doc_id and extract metadata
+        documents = {}
+        for i, metadata in enumerate(all_docs.get("metadatas", [])):
+            doc_id = metadata.get("doc_id")
+            filename = metadata.get("filename")
+            
+            if doc_id and filename:
+                if doc_id not in documents:
+                    documents[doc_id] = {
+                        "doc_id": doc_id,
+                        "filename": filename,
+                        "namespace": namespace_name,
+                        "chunk_count": 0,
+                        "session_id": metadata.get("session_id", "unknown")
+                    }
+                documents[doc_id]["chunk_count"] += 1
+        
+        document_list = list(documents.values())
+        
+        return {
+            "namespace": namespace_name,
+            "documents": document_list,
+            "total_documents": len(document_list),
+            "total_chunks": len(all_docs.get("ids", []))
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to list documents in namespace: {str(e)}"
+        )
 
 
 @app.get("/healthz")
