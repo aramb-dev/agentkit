@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import type { ChatMessage, ChatState, FileAttachment, AgentResponse, DocumentIngestResponse } from "@/types/chat";
 import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
 import { MessageInput } from "./MessageInput";
+import { NamespaceSelector } from "./NamespaceSelector";
 import { Trash2, Bot, Loader2 } from "lucide-react";
 import axios from 'axios';
 
@@ -388,6 +389,13 @@ export function ChatContainer() {
         }));
     };
 
+    const handleNamespaceChange = (namespace: string) => {
+        setChatState(prev => ({
+            ...prev,
+            namespace
+        }));
+    };
+
     return (
         <div className="flex flex-col h-screen max-w-4xl mx-auto p-4">
             <Card className="flex-1 flex flex-col">
@@ -398,31 +406,39 @@ export function ChatContainer() {
                         <CardTitle className="text-xl">AgentKit Chat</CardTitle>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                        {/* Model selector */}
-                        <select
-                            value={chatState.selectedModel}
-                            onChange={(e) => handleModelChange(e.target.value)}
-                            className="text-sm border rounded px-2 py-1"
-                            disabled={chatState.isLoading}
-                            title="Select AI Model"
-                            aria-label="Select AI Model"
-                        >
-                            {chatState.availableModels.map((model) => (
-                                <option key={model} value={model}>
-                                    {model}
-                                </option>
-                            ))}
-                        </select>
+                    <div className="flex items-center gap-4">
+                        {/* Namespace Selector */}
+                        <NamespaceSelector
+                            selectedNamespace={chatState.namespace}
+                            onNamespaceChange={handleNamespaceChange}
+                        />
 
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={handleClearChat}
-                            disabled={chatState.isLoading || chatState.messages.length === 0}
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </Button>
+                        <div className="flex items-center gap-2">
+                            {/* Model selector */}
+                            <select
+                                value={chatState.selectedModel}
+                                onChange={(e) => handleModelChange(e.target.value)}
+                                className="text-sm border rounded px-2 py-1"
+                                disabled={chatState.isLoading}
+                                title="Select AI Model"
+                                aria-label="Select AI Model"
+                            >
+                                {chatState.availableModels.map((model) => (
+                                    <option key={model} value={model}>
+                                        {model}
+                                    </option>
+                                ))}
+                            </select>
+
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={handleClearChat}
+                                disabled={chatState.isLoading || chatState.messages.length === 0}
+                            >
+                                <Trash2 className="w-4 h-4" />
+                            </Button>
+                        </div>
                     </div>
                 </CardHeader>
 

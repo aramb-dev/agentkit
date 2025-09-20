@@ -3,7 +3,8 @@ import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Trash2, RefreshCw, FolderOpen } from "lucide-react";
+import { NamespaceSelector } from "./NamespaceSelector";
+import { Trash2, RefreshCw, FolderOpen, File } from "lucide-react";
 import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:8000';
@@ -23,11 +24,31 @@ interface StorageStats {
     total_size_mb: number;
 }
 
+interface NamespaceDocument {
+    doc_id: string;
+    filename: string;
+    namespace: string;
+    chunk_count: number;
+    session_id: string;
+}
+
+interface NamespaceDocumentsResponse {
+    namespace: string;
+    documents: NamespaceDocument[];
+    total_documents: number;
+    total_chunks: number;
+}
+
 export function FileManager() {
     const [files, setFiles] = useState<StoredFile[]>([]);
     const [stats, setStats] = useState<StorageStats | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    
+    // Namespace-specific state
+    const [selectedNamespace, setSelectedNamespace] = useState('default');
+    const [namespaceDocuments, setNamespaceDocuments] = useState<NamespaceDocument[]>([]);
+    const [isLoadingDocs, setIsLoadingDocs] = useState(false);
 
     const loadFiles = async () => {
         setIsLoading(true);
@@ -46,6 +67,24 @@ export function FileManager() {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const loadNamespaceDocuments = async (namespace: string) => {
+        setIsLoadingDocs(true);
+        try {
+            const response = await axios.get<NamespaceDocumentsResponse>(`${API_BASE_URL}/namespaces/${namespace}/documents`);
+            setNamespaceDocuments(response.data.documents);
+        } catch (err) {
+            console.error('Error loading namespace documents:', err);
+            setNamespaceDocuments([]);
+        } finally {
+            setIsLoadingDocs(false);
+        }
+    };
+
+    const handleNamespaceChange = (namespace: string) => {
+        setSelectedNamespace(namespace);
+        loadNamespaceDocuments(namespace);
     };
 
     const deleteFile = async (fileId: string) => {
@@ -70,7 +109,12 @@ export function FileManager() {
 
     useEffect(() => {
         loadFiles();
+        loadNamespaceDocuments(selectedNamespace);
     }, []);
+
+    useEffect(() => {
+        loadNamespaceDocuments(selectedNamespace);
+    }, [selectedNamespace]);
 
     const formatFileSize = (bytes: number) => {
         if (bytes === 0) return '0 Bytes';
@@ -128,7 +172,17 @@ export function FileManager() {
                 </div>
             </CardHeader>
 
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-6">
+                {/* Namespace Selector */}
+                <div className="flex items-center justify-between">
+                    <NamespaceSelector
+                        selectedNamespace={selectedNamespace}
+                        onNamespaceChange={handleNamespaceChange}
+                    />
+                    <div className="text-sm text-muted-foreground">
+                        Documents in namespace: {namespaceDocuments.length}
+                    </div>
+                </div>
                 {/* Storage Stats */}
                 {stats && (
                     <div className="grid grid-cols-3 gap-4">
@@ -154,9 +208,45 @@ export function FileManager() {
                     </div>
                 )}
 
-                {/* Files List */}
+                {/* RAG Documents in Current Namespace */}
                 <div>
-                    <h3 className="text-lg font-semibold mb-3">Uploaded Files ({files.length})</h3>
+                    <h3 className="text-lg font-semibold mb-3">
+                        RAG Documents in "{selectedNamespace}" ({namespaceDocuments.length})
+                    </h3>
+
+                    {isLoadingDocs ? (
+                        <div className="text-center py-8">Loading documents...</div>
+                    ) : namespaceDocuments.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                            No documents in this namespace yet
+                        </div>
+                    ) : (
+                        <ScrollArea className="h-64">
+                            <div className="space-y-2">
+                                {namespaceDocuments.map((doc) => (
+                                    <Card key={doc.doc_id} className="p-3">
+                                        <div className="flex items-center gap-3">
+                                            <File className="w-5 h-5 text-blue-500" />
+                                            <div className="flex-1 min-w-0">
+                                                <p className="font-medium truncate">{doc.filename}</p>
+                                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                    <Badge variant="outline" className="text-xs">
+                                                        {doc.chunk_count} chunks
+                                                    </Badge>
+                                                    <span>Session: {doc.session_id}</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </Card>
+                                ))}
+                            </div>
+                        </ScrollArea>
+                    )}
+                </div>
+
+                {/* All Uploaded Files */}
+                <div>
+                    <h3 className="text-lg font-semibold mb-3">All Uploaded Files ({files.length})</h3>
 
                     {isLoading ? (
                         <div className="text-center py-8">Loading files...</div>
