@@ -31,6 +31,20 @@ class LLMClient:
                 self._load_available_models()
             except Exception as e:
                 print(f"Warning: Failed to initialize Gemini client: {e}")
+                # Set fallback models even if client init fails
+                self._set_fallback_models()
+        else:
+            print("No Google API key found, using fallback models")
+            # Set fallback models when no API key
+            self._set_fallback_models()
+    
+    def _set_fallback_models(self):
+        """Set fallback models when API is not available."""
+        self.available_models = [
+            "gemini-2.0-flash-001",
+            "gemini-1.5-flash", 
+            "gemini-1.5-pro",
+        ]
 
     def _load_available_models(self):
         """Load available text generation models from Google GenAI."""
@@ -71,12 +85,8 @@ class LLMClient:
 
         except Exception as e:
             print(f"Warning: Could not load available models: {e}")
-            # Default fallback models
-            self.available_models = [
-                "gemini-2.0-flash-001",
-                "gemini-1.5-flash",
-                "gemini-1.5-pro",
-            ]
+            # Use fallback models
+            self._set_fallback_models()
 
     def get_available_models(self) -> list[str]:
         """Get list of available text generation models."""

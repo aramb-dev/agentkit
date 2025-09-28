@@ -530,6 +530,65 @@ async def list_namespace_documents(namespace_name: str):
         )
 
 
+@app.get("/monitoring/routing")
+def get_routing_metrics():
+    """Get routing system performance metrics."""
+    from agent.router import get_routing_metrics
+    return {
+        "routing_metrics": get_routing_metrics(),
+        "timestamp": _get_current_timestamp()
+    }
+
+
+@app.get("/monitoring/tools")  
+def get_tool_performance():
+    """Get tool performance metrics and statistics."""
+    from agent.tools import get_all_tool_performance_stats
+    return {
+        "tool_performance": get_all_tool_performance_stats(),
+        "timestamp": _get_current_timestamp()
+    }
+
+
+@app.get("/monitoring/system")
+async def get_system_performance():
+    """Get comprehensive system performance metrics."""
+    from agent.router import get_routing_metrics
+    from agent.tools import get_all_tool_performance_stats
+    
+    return {
+        "routing_metrics": get_routing_metrics(), 
+        "tool_performance": get_all_tool_performance_stats(),
+        "llm_status": {
+            "available_models": llm_client.get_available_models(),
+            "default_model": llm_client.get_default_model(),
+            "gemini_available": llm_client.is_available("gemini")
+        },
+        "timestamp": _get_current_timestamp()
+    }
+
+
+@app.post("/monitoring/reset")
+def reset_performance_metrics():
+    """Reset all performance metrics (useful for testing)."""
+    from agent.router import reset_routing_metrics
+    from agent.tools import reset_tool_metrics
+    
+    reset_routing_metrics()
+    reset_tool_metrics()
+    
+    return {
+        "message": "Performance metrics reset successfully",
+        "timestamp": _get_current_timestamp()
+    }
+
+
+def _get_current_timestamp():
+    """Get current timestamp in ISO format."""
+    from datetime import datetime
+    return datetime.now().isoformat()
+
+
 @app.get("/healthz")
 def healthz():
     return {"status": "ok", "version": "1.0.0"}

@@ -5,8 +5,10 @@ from __future__ import annotations
 import asyncio
 import datetime as _dt
 import os
-from dataclasses import dataclass
-from typing import Awaitable, Callable, Dict, List
+import random
+import time
+from dataclasses import dataclass, field
+from typing import Awaitable, Callable, Dict, List, Any
 
 from dotenv import load_dotenv
 from tavily import TavilyClient
@@ -30,20 +32,68 @@ ToolResult = str | Awaitable[str]
 
 @dataclass(slots=True)
 class Tool:
-    """Descriptor for an agent tool."""
+    """Enhanced tool descriptor with performance monitoring."""
 
     name: str
     description: str
     fn: ToolFn
+    metrics: Dict[str, Any] = field(default_factory=lambda: {
+        "total_calls": 0,
+        "total_time": 0.0,
+        "success_count": 0,
+        "error_count": 0,
+        "last_used": None,
+        "average_response_time": 0.0
+    })
 
     async def run(self, query: str) -> str:
-        """Execute the wrapped function regardless of sync/async signature."""
+        """Execute the wrapped function with performance monitoring."""
+        start_time = time.time()
+        self.metrics["total_calls"] += 1
+        self.metrics["last_used"] = _dt.datetime.now().isoformat()
+        
+        try:
+            if asyncio.iscoroutinefunction(self.fn):
+                result = await self.fn(query)  # type: ignore[arg-type]
+            else:
+                loop = asyncio.get_running_loop()
+                result = await loop.run_in_executor(None, self.fn, query)
+            
+            # Record success metrics
+            execution_time = time.time() - start_time
+            self.metrics["total_time"] += execution_time
+            self.metrics["success_count"] += 1
+            self.metrics["average_response_time"] = self.metrics["total_time"] / self.metrics["total_calls"]
+            
+            return result
+            
+        except Exception as e:
+            # Record error metrics
+            execution_time = time.time() - start_time
+            self.metrics["total_time"] += execution_time
+            self.metrics["error_count"] += 1
+            self.metrics["average_response_time"] = self.metrics["total_time"] / self.metrics["total_calls"]
+            
+            error_msg = f"Tool {self.name} failed: {str(e)}"
+            print(f"[TOOL ERROR] {error_msg}")
+            return error_msg
 
-        if asyncio.iscoroutinefunction(self.fn):
-            return await self.fn(query)  # type: ignore[arg-type]
-
-        loop = asyncio.get_running_loop()
-        return await loop.run_in_executor(None, self.fn, query)
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """Get performance statistics for this tool."""
+        success_rate = (
+            (self.metrics["success_count"] / self.metrics["total_calls"] * 100) 
+            if self.metrics["total_calls"] > 0 else 0
+        )
+        
+        return {
+            "name": self.name,
+            "total_calls": self.metrics["total_calls"],
+            "success_rate": f"{success_rate:.1f}%",
+            "average_response_time": f"{self.metrics['average_response_time']:.2f}s",
+            "total_time": f"{self.metrics['total_time']:.2f}s",
+            "last_used": self.metrics["last_used"],
+            "errors": self.metrics["error_count"]
+        }
 
 
 # Initialize Tavily client
@@ -87,7 +137,7 @@ async def _web_search(query: str) -> str:
                             f"{i}. **{title}**\n   {content}\n   Source: {url}"
                         )
 
-                    timestamp = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+                    timestamp = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
                     return (
                         f"Web search results for '{query}' (as of {timestamp}):\n\n"
                         + "\n\n".join(formatted_results)
@@ -116,7 +166,7 @@ def _fallback_web_search(query: str) -> str:
     ]
 
     headline = random.choice(news_items)
-    timestamp = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+    timestamp = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     return f"Search results for '{query}' (as of {timestamp}):\n\n• {headline}\n\n[Note: This is simulated search data - Tavily API not available]"
 
@@ -145,7 +195,7 @@ def _retrieve_context(query: str, namespace: str = "default", k: int = 5) -> str
 
             lines.append(f"**Document {i}: {src} (chunk #{chunk_num})**\n{text}")
 
-        timestamp = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        timestamp = _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
         result = (
             f"RAG search results for '{query}' in namespace '{namespace}' (as of {timestamp}):\n\n"
             + "\n\n".join(lines)
@@ -196,7 +246,7 @@ def _fallback_rag_search(query: str) -> str:
 
 def _memory_lookup(query: str) -> str:
     """Enhanced memory function with better context."""
-    now = _dt.datetime.utcnow().isoformat(timespec="seconds")
+    now = _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
 
     # Extract what the user wants to remember/recall
     if "remember" in query.lower():
@@ -240,3 +290,21 @@ TOOLS: Dict[str, Tool] = {
         fn=_idle,
     ),
 }
+
+
+def get_all_tool_performance_stats() -> Dict[str, Dict[str, Any]]:
+    """Get performance statistics for all tools."""
+    return {tool_name: tool.get_performance_stats() for tool_name, tool in TOOLS.items()}
+
+
+def reset_tool_metrics():
+    """Reset performance metrics for all tools."""
+    for tool in TOOLS.values():
+        tool.metrics = {
+            "total_calls": 0,
+            "total_time": 0.0,
+            "success_count": 0,
+            "error_count": 0,
+            "last_used": None,
+            "average_response_time": 0.0
+        }
