@@ -10,6 +10,7 @@ from .prompts import AVAILABLE_TOOLS_PROMPT, SUMMARY_PROMPT, SYSTEM_PROMPT
 from .router import describe_tools, select_tool
 from .tools import TOOLS
 from .llm_client import llm_client
+from .tool_chain import tool_chain
 
 
 @dataclass
@@ -75,6 +76,8 @@ async def run_agent_with_history(
     session_id: str = "default",
 ) -> Dict[str, str]:
     """Entry point used by the FastAPI app with conversation history support."""
+    import time
+    start_time = time.time()
 
     # Convert conversation history to Message objects
     history = []
@@ -85,34 +88,88 @@ async def run_agent_with_history(
     # Add current user message
     history.append(Message(role="user", content=message))
 
-    # Create context from recent conversation for tool selection
+    # Create context from recent conversation for enhanced routing
     recent_context = "\n".join([f"{msg.role}: {msg.content}" for msg in history[-3:]])
 
-    tool_name = await select_tool(
-        f"Recent conversation:\n{recent_context}\n\nCurrent message: {message}"
-    )
+    # Check if this query could benefit from tool chaining
+    chain_steps = await tool_chain.detect_chain_opportunity(message, recent_context)
+    
+    if chain_steps:
+        # Execute tool chain
+        chain_result = await tool_chain.execute_chain(chain_steps, namespace)
+        
+        if chain_result.success:
+            # Combine results from chained tools
+            combined_output = "\n\n".join([
+                f"**{tool}**: {result}" for tool, result in chain_result.results.items()
+            ])
+            
+            # Add chain execution info to history
+            history.append(Message(
+                role="tool", 
+                content=f"chain: {' → '.join(chain_result.execution_order)} | {combined_output}"
+            ))
+            
+            # Format response with chain context
+            conversation_context = "\n".join([f"{msg.role}: {msg.content}" for msg in history[-5:]])
+            final_answer = await _format_chain_response(
+                message, model, chain_result.results, chain_result.execution_order, conversation_context
+            )
+            
+            execution_time = time.time() - start_time
+            summary = _summarise(history, final_answer)
+            
+            return {
+                "answer": final_answer,
+                "tool_used": f"chain({' → '.join(chain_result.execution_order)})",
+                "tool_output": combined_output,
+                "model": model,
+                "context": AVAILABLE_TOOLS_PROMPT.format(tool_overview=describe_tools()),
+                "summary": summary,
+                "chain_execution": True,
+                "execution_time": execution_time,
+                "chain_details": {
+                    "steps": len(chain_steps),
+                    "tools": chain_result.execution_order,
+                    "success": chain_result.success
+                }
+            }
+        else:
+            # Chain failed, fall back to single tool
+            print(f"Tool chain failed: {chain_result.error}, falling back to single tool")
+
+    # Standard single tool execution
+    tool_name = await select_tool(f"Current message: {message}", f"Recent conversation:\n{recent_context}")
     tool = TOOLS[tool_name]
 
-    # Handle RAG tool with namespace parameter
-    if tool_name == "rag":
-        from .tools import _retrieve_context
-
-        tool_output = _retrieve_context(message, namespace=namespace)
-    else:
-        tool_output = await tool.run(message)
+    # Execute single tool with error handling
+    tool_output = ""
+    tool_error = None
+    
+    try:
+        # Handle RAG tool with namespace parameter
+        if tool_name == "rag":
+            from .tools import _retrieve_context
+            tool_output = _retrieve_context(message, namespace=namespace)
+        else:
+            tool_output = await tool.run(message)
+    except Exception as e:
+        tool_error = str(e)
+        tool_output = f"Tool execution failed: {tool_error}"
+        print(f"Tool {tool_name} execution error: {e}")
 
     if tool_name != "idle" and tool_output:
         history.append(Message(role="tool", content=f"{tool_name}: {tool_output}"))
 
     # Include conversation context in response generation
-    conversation_context = "\n".join(
-        [f"{msg.role}: {msg.content}" for msg in history[-5:]]
-    )
+    conversation_context = "\n".join([f"{msg.role}: {msg.content}" for msg in history[-5:]])
+    
     final_answer = await _format_response_with_context(
         message, model, tool_name, tool_output, conversation_context
     )
+    
+    execution_time = time.time() - start_time
     summary = _summarise(history, final_answer)
-
     tool_overview = AVAILABLE_TOOLS_PROMPT.format(tool_overview=describe_tools())
 
     return {
@@ -122,7 +179,53 @@ async def run_agent_with_history(
         "model": model,
         "context": tool_overview,
         "summary": summary,
+        "chain_execution": False,
+        "execution_time": execution_time,
+        "tool_error": tool_error
     }
+
+
+async def _format_chain_response(
+    message: str,
+    model: str, 
+    chain_results: Dict[str, str],
+    execution_order: List[str],
+    conversation_context: str
+) -> str:
+    """Format response when multiple tools were used in a chain."""
+    
+    # Create a summary of what each tool contributed
+    tool_contributions = []
+    for tool_name in execution_order:
+        result = chain_results.get(tool_name, "No result")
+        tool_contributions.append(f"- **{tool_name.title()}**: {result[:200]}{'...' if len(result) > 200 else ''}")
+    
+    contributions_summary = "\n".join(tool_contributions)
+    
+    prompt = f"""You are AgentKit, a powerful AI agent that just executed a sophisticated workflow. 
+
+User asked: "{message}"
+
+Recent conversation context:
+{conversation_context}
+
+I used multiple tools in sequence to provide a comprehensive answer:
+{contributions_summary}
+
+Your task is to synthesize these results into a coherent, valuable response:
+
+Guidelines:
+- Acknowledge the comprehensive analysis you performed
+- Synthesize information from all tools into a unified answer  
+- Highlight connections and insights across the different tool results
+- Be confident about the thoroughness of your analysis
+- Show how the multi-step approach provided better results
+- Present the information clearly and professionally
+- Reference specific findings from each tool when relevant
+
+Provide a confident, well-structured response that showcases the value of the multi-tool analysis."""
+
+    return await llm_client.generate_response(prompt, model)
 
 
 async def _format_response_with_context(
