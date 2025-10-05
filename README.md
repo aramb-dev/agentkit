@@ -35,7 +35,16 @@ AgentKit is a comprehensive AI-powered assistant built with Google's Gemini mode
 - **Dynamic Model Discovery**: Auto-detects available models with 4000 token responses
 - **Conversation Memory**: Maintains context across entire chat sessions
 
-### 🔍 **Real-Time Web Search**
+### 🔍 **Advanced RAG Features (Phase 3.3)** 🆕
+
+- **Semantic Search**: Enhanced relevance scoring for better document retrieval
+- **Citation Support**: Automatic source attribution with document references
+- **Hybrid Search**: Combines web search and document retrieval for comprehensive answers
+- **Search Modes**: Configurable search preferences (Auto, Web, Documents, Hybrid)
+- **Query Understanding**: Advanced query preprocessing for improved semantic matching
+- **Source Attribution**: Clear tracking of information sources in responses
+
+### 🌐 **Real-Time Web Search**
 
 - **Tavily API Integration**: Current, accurate web information
 - **Smart Search Triggers**: Automatically searches when queries need current data
@@ -160,6 +169,33 @@ The frontend will be available at `http://localhost:5173`
 - `DELETE /files/{file_id}` - Delete specific files
 
 ## 🔧 Advanced Configuration
+
+### Advanced RAG Features 🆕
+
+AgentKit now includes powerful search capabilities:
+
+#### Search Modes
+
+- **🔍 Auto Mode**: Intelligent LLM-powered routing (default)
+- **🌐 Web Mode**: Search current web information only
+- **📄 Documents Mode**: Search uploaded documents only
+- **⚡ Hybrid Mode**: Combine web and document search
+
+#### Citation Features
+
+- Automatic source attribution in responses
+- Document name and chunk references
+- Relevance scores for each source
+- Clear distinction between web and document sources
+
+#### Query Understanding
+
+- Advanced query preprocessing
+- Semantic enhancement for better matching
+- Filler word removal
+- Context preservation
+
+**See [ADVANCED_RAG_FEATURES.md](ADVANCED_RAG_FEATURES.md) for detailed documentation.**
 
 ### Model Selection
 
