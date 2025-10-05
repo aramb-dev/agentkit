@@ -64,10 +64,12 @@ async def chat(
     files: List[UploadFile] = File(default=[]),
     namespace: str = Form(default="default"),  # RAG namespace for document isolation
     session_id: str = Form(default="default"),  # Session ID for conversation context
+    search_mode: str = Form(default="auto"),  # Search mode: auto, web, documents, hybrid
 ):
     """
     Send a chat message to AgentKit with optional file attachments and conversation history.
     Supports RAG retrieval from previously ingested documents using namespace isolation.
+    Advanced search modes: auto (intelligent selection), web, documents, or hybrid (both).
     """
     import json
 
@@ -136,7 +138,7 @@ async def chat(
         message_with_files = message
 
     response = await run_agent_with_history(
-        message_with_files, model, conversation_history, namespace, session_id
+        message_with_files, model, conversation_history, namespace, session_id, search_mode
     )
 
     # Add stored file information to response

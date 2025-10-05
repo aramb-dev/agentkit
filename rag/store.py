@@ -63,7 +63,7 @@ def upsert_chunks(namespace: str, chunks: List[Dict]):
 
 
 def query(namespace: str, query_text: str, k: int = 5) -> List[Dict]:
-    """Query the vector database for relevant chunks."""
+    """Query the vector database for relevant chunks with enhanced semantic search."""
     try:
         col = get_collection(namespace)
         model = get_model()
@@ -74,18 +74,24 @@ def query(namespace: str, query_text: str, k: int = 5) -> List[Dict]:
         # Query ChromaDB
         res = col.query(query_embeddings=q_emb, n_results=k)
 
-        # Format results
+        # Format results with relevance scores
         out = []
         if res["ids"] and res["ids"][0]:
             for i in range(len(res["ids"][0])):
+                distance = res["distances"][0][i] if "distances" in res else None
+                
+                # Calculate relevance score (convert distance to similarity)
+                # ChromaDB uses L2 distance, so lower is better
+                # Convert to 0-1 scale where 1 is most relevant
+                relevance_score = 1.0 / (1.0 + distance) if distance is not None else 0.5
+                
                 out.append(
                     {
                         "id": res["ids"][0][i],
                         "text": res["documents"][0][i],
                         "metadata": res["metadatas"][0][i],
-                        "distance": (
-                            res["distances"][0][i] if "distances" in res else None
-                        ),
+                        "distance": distance,
+                        "relevance_score": round(relevance_score, 3),
                     }
                 )
 
