@@ -171,42 +171,66 @@ def _fallback_web_search(query: str) -> str:
     return f"Search results for '{query}' (as of {timestamp}):\n\n• {headline}\n\n[Note: This is simulated search data - Tavily API not available]"
 
 
-def _enhance_query(query: str) -> str:
+async def _enhance_query(query: str) -> str:
     """
-    Enhance query with advanced understanding techniques.
+    Enhance query using LLM for advanced understanding.
     
     This includes:
     - Query expansion for better semantic matching
     - Synonym detection
     - Context preservation
+    - Key concept extraction
     """
-    # Remove common filler words that don't add semantic value
-    filler_words = {'please', 'could', 'would', 'can', 'you', 'tell', 'me', 'about'}
-    words = query.lower().split()
-    enhanced_words = [w for w in words if w not in filler_words]
+    from .llm_client import llm_client
     
-    # If query is very short, keep original to preserve intent
-    if len(enhanced_words) < 2:
+    # For very short queries, return as-is
+    if len(query.split()) <= 2:
         return query
     
-    # Reconstruct query
-    enhanced = ' '.join(enhanced_words)
-    
-    # Preserve original if enhancement made it too short
-    if len(enhanced) < len(query) * 0.5:
+    try:
+        # Use LLM to extract key search terms and concepts
+        prompt = f"""Given this user query, extract the key search terms and concepts that would be most effective for semantic document search. Remove filler words but preserve important context.
+
+User Query: "{query}"
+
+Return only the enhanced search query without any explanation. Keep it concise and focused on the core concepts. If the query is already optimal, return it unchanged.
+
+Enhanced Query:"""
+        
+        enhanced = await llm_client.generate_response(prompt, model="gemini")
+        
+        # Check if we got an error/fallback message from LLM
+        if "unable to access" in enhanced.lower() or "api" in enhanced.lower() and "key" in enhanced.lower():
+            # LLM not available, return original
+            return query
+        
+        # Clean up the response
+        enhanced = enhanced.strip().strip('"').strip("'")
+        
+        # If enhancement failed or is too different, use original
+        if not enhanced or len(enhanced) < 2:
+            return query
+            
+        # If enhancement is too short compared to original, use original
+        if len(enhanced) < len(query) * 0.3:
+            return query
+            
+        return enhanced
+        
+    except Exception as e:
+        print(f"Query enhancement error: {e}")
+        # Fallback to original query on error
         return query
-    
-    return enhanced
 
 
-def _retrieve_context(query: str, namespace: str = "default", k: int = 5) -> str:
+async def _retrieve_context(query: str, namespace: str = "default", k: int = 5) -> str:
     """Retrieve relevant document chunks using enhanced semantic search with citations."""
     if not RAG_AVAILABLE or vector_query is None:
         return _fallback_rag_search(query)
 
     try:
-        # Apply advanced query understanding
-        enhanced_query = _enhance_query(query)
+        # Apply advanced query understanding using LLM
+        enhanced_query = await _enhance_query(query)
         
         hits = vector_query(namespace, enhanced_query, k=k)
         if not hits:
@@ -302,9 +326,9 @@ def _memory_lookup(query: str) -> str:
         return f"[{now} UTC] Memory operation: {query}\n\nMemory system is ready to store or recall information."
 
 
-def _rag_wrapper(query: str) -> str:
+async def _rag_wrapper(query: str) -> str:
     """Wrapper for RAG that uses default namespace - will be overridden by agent."""
-    return _retrieve_context(query, namespace="default")
+    return await _retrieve_context(query, namespace="default")
 
 
 def _idle(query: str) -> str:
@@ -323,10 +347,7 @@ async def _hybrid_search(query: str, namespace: str = "default") -> str:
     """
     # Execute both searches in parallel for efficiency
     web_task = asyncio.create_task(_web_search(query))
-    
-    # For RAG, we need to call it synchronously since it's not async
-    loop = asyncio.get_running_loop()
-    rag_task = loop.run_in_executor(None, _retrieve_context, query, namespace, 3)
+    rag_task = asyncio.create_task(_retrieve_context(query, namespace, 3))
     
     # Wait for both to complete
     web_results, rag_results = await asyncio.gather(web_task, rag_task, return_exceptions=True)

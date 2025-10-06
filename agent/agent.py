@@ -160,7 +160,7 @@ async def run_agent_with_history(
         # Handle RAG tool with namespace parameter
         if tool_name == "rag":
             from .tools import _retrieve_context
-            tool_output = _retrieve_context(message, namespace=namespace)
+            tool_output = await _retrieve_context(message, namespace=namespace)
         # Handle hybrid tool with namespace parameter
         elif tool_name == "hybrid":
             from .tools import _hybrid_search

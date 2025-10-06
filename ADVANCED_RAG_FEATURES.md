@@ -97,22 +97,34 @@ relevance_score = 1.0 / (1.0 + distance)
 **What it is:** Query preprocessing that enhances semantic matching.
 
 **Features:**
-- Filler word removal (please, could, would, etc.)
-- Query optimization for better embeddings
-- Context preservation for important terms
-- Intelligent enhancement that preserves intent
+- LLM-powered query analysis
+- Intelligent filler word removal
+- Key concept extraction
+- Context preservation
+- Synonym expansion
+- Automatic fallback to original query if LLM unavailable
 
-**Example:**
+**How it works:**
+```python
+async def _enhance_query(query: str) -> str:
+    """Use LLM to extract key search terms and concepts."""
+    # Sends query to LLM with specific prompt
+    # LLM analyzes and returns optimized search terms
+    # Falls back to original if LLM unavailable
 ```
-Original: "Could you please tell me about the architecture?"
-Enhanced: "architecture"
+
+**Example (when LLM is available):**
+```
+Original: "Could you please tell me about the architecture of the system?"
+Enhanced: "system architecture"
 ```
 
 **Benefits:**
-- Better semantic matches
-- More relevant results
-- Reduced noise in queries
+- Smarter semantic matches using AI understanding
+- Context-aware query optimization
+- Better handling of complex queries
 - Improved retrieval accuracy
+- Graceful fallback when LLM unavailable
 
 ### 5. Configurable Search Modes
 

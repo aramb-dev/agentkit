@@ -190,10 +190,10 @@ AgentKit now includes powerful search capabilities:
 
 #### Query Understanding
 
-- Advanced query preprocessing
-- Semantic enhancement for better matching
-- Filler word removal
-- Context preservation
+- LLM-powered query preprocessing
+- Intelligent semantic enhancement
+- Context-aware filler word removal
+- Automatic concept extraction
 
 **See [ADVANCED_RAG_FEATURES.md](ADVANCED_RAG_FEATURES.md) for detailed documentation.**
 
