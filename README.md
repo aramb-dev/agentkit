@@ -14,9 +14,10 @@ AgentKit is a powerful AI assistant that combines intelligent conversation with 
 
 ### 📁 Enhanced File Upload Experience  
 - **Drag-and-drop interface**: Intuitive file upload with visual feedback
-- **Multi-format support**: PDF, TXT, DOCX, MD, JSON files (up to 10MB each)
+- **Multi-format support**: PDF, TXT, DOCX, MD, JSON files (up to 50MB each)
 - **Visual file management**: Clear indicators for upload status, processing stages, and completion
-- **Error recovery**: Detailed error messages with specific resolution steps
+- **Comprehensive validation**: Client-side and server-side file validation with clear error messages
+- **Error recovery**: Detailed error messages with specific resolution steps and retry logic
 
 ### 🎨 Modern UI Components
 - **Progress components**: Built with @radix-ui/react-progress for smooth animations
@@ -75,10 +76,23 @@ AgentKit is a comprehensive AI-powered assistant built with Google's Gemini mode
 
 ### ⚡ **Production-Ready Backend**
 
-- **FastAPI Server**: Async API with CORS support and error handling
+- **FastAPI Server**: Async API with CORS support and comprehensive error handling
 - **Conversation History**: Maintains chat context across requests
 - **Environment Configuration**: Secure API key management
 - **Health Monitoring**: Comprehensive logging and error tracking
+
+### 🛡️ **Error Handling & Validation (Phase 2.2 - Complete)** ✅
+
+- **Comprehensive File Validation**: Size (50MB), type, format, and path traversal checks
+- **Standardized Error Responses**: Consistent JSON format with error codes and details
+- **Retry Logic**: Automatic retry with exponential backoff for transient failures
+- **Client-Side Validation**: Pre-upload validation with instant feedback
+- **Request Tracking**: Unique request IDs for debugging and monitoring
+- **Security Features**: Path traversal protection, extension whitelisting, DoS prevention
+- **Clear Error Messages**: User-friendly messages with actionable recovery steps
+- **Extensive Testing**: 15+ automated tests covering validation scenarios
+
+📚 **See [ERROR_HANDLING.md](ERROR_HANDLING.md) for complete error handling guide**
 
 ## 🏗️ Project Structure
 
