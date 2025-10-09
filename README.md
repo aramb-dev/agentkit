@@ -35,14 +35,19 @@ AgentKit is a comprehensive AI-powered assistant built with Google's Gemini mode
 - **Dynamic Model Discovery**: Auto-detects available models with 4000 token responses
 - **Conversation Memory**: Maintains context across entire chat sessions
 
-### 🔍 **Advanced RAG Features (Phase 3.3)** 🆕
+### 🔍 **Advanced RAG Features (Phase 1.4 - Complete)** ✅
 
+- **Full Vector Store Integration**: Connected to ChromaDB for persistent document storage
 - **Semantic Search**: Enhanced relevance scoring for better document retrieval
 - **Citation Support**: Automatic source attribution with document references
 - **Hybrid Search**: Combines web search and document retrieval for comprehensive answers
 - **Search Modes**: Configurable search preferences (Auto, Web, Documents, Hybrid)
 - **Query Understanding**: Advanced query preprocessing for improved semantic matching
 - **Source Attribution**: Clear tracking of information sources in responses
+- **End-to-End Workflow**: Complete PDF upload → embedding → query → citation pipeline
+- **Comprehensive Testing**: Full test suite with end-to-end integration tests
+
+📚 **See [RAG_INTEGRATION.md](RAG_INTEGRATION.md) for complete setup and usage guide**
 
 ### 🌐 **Real-Time Web Search**
 

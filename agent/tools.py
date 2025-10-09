@@ -277,39 +277,31 @@ async def _retrieve_context(query: str, namespace: str = "default", k: int = 5) 
 
 
 def _fallback_rag_search(query: str) -> str:
-    """Fallback when RAG system is not available."""
-    docs = {
-        "architecture": """AgentKit Architecture Overview:
-- Router: Analyzes user queries and selects appropriate tools based on keyword matching
-- Tools: Modular components that handle specific tasks (web search, document retrieval, memory)
-- LLM Integration: Uses Google Gemini to generate natural, contextual responses
-- Response Formatter: Combines tool outputs with AI-generated explanations""",
-        "memory": """Memory System:
-- Stores user queries with timestamps for recall functionality
-- Provides context for ongoing conversations
-- Simulates persistent memory across interactions
-- Can be extended to use vector databases for semantic search""",
-        "setup": """AgentKit Setup:
-- Built with FastAPI for API endpoints
-- Streamlit UI for web interface
-- LangChain integration for LLM connectivity
-- Environment variables for API key management""",
-    }
+    """Fallback when RAG system is not available.
+    
+    This should only be called when the RAG system dependencies are not installed.
+    In production, the full RAG system should always be available.
+    """
+    return f"""[RAG System Unavailable]
 
-    query_lower = query.lower()
-    matched_docs = []
+The document retrieval system (RAG) is currently not available. This typically means:
 
-    for key, content in docs.items():
-        if key in query_lower or any(word in query_lower for word in key.split()):
-            matched_docs.append(f"=== {key.title()} ===\n{content}")
+1. **Missing Dependencies**: ChromaDB or sentence-transformers not installed
+2. **Import Error**: Vector store module failed to load
+3. **Development Mode**: Running without full RAG setup
 
-    if matched_docs:
-        return (
-            "\n\n".join(matched_docs)
-            + "\n\n[Note: Using fallback documentation - RAG system not available]"
-        )
+Your query: "{query}"
 
-    return f"No specific documentation found for '{query}'. Available topics: architecture, memory, setup\n\n[Note: RAG system not available - upload documents via /docs/ingest for better results]"
+To enable full RAG functionality:
+- Install dependencies: pip install chromadb sentence-transformers
+- Upload documents via /docs/ingest endpoint
+- Query your uploaded documents using the RAG tool
+
+For more information, see the documentation:
+- ADVANCED_RAG_FEATURES.md
+- DOCUMENT_MANAGEMENT.md
+
+[Note: This is a fallback message - no hardcoded documents are returned]"""
 
 
 def _memory_lookup(query: str) -> str:
