@@ -101,6 +101,29 @@ def query(namespace: str, query_text: str, k: int = 5) -> List[Dict]:
         return []
 
 
+def delete_document(namespace: str, doc_id: str):
+    """Delete all chunks for a specific document by doc_id."""
+    try:
+        col = get_collection(namespace)
+        # Get all chunks with matching doc_id
+        all_docs = col.get()
+        
+        # Find IDs of chunks belonging to this document
+        chunk_ids_to_delete = []
+        for i, metadata in enumerate(all_docs.get("metadatas", [])):
+            if metadata.get("doc_id") == doc_id:
+                chunk_ids_to_delete.append(all_docs["ids"][i])
+        
+        # Delete the chunks
+        if chunk_ids_to_delete:
+            col.delete(ids=chunk_ids_to_delete)
+            return len(chunk_ids_to_delete)
+        return 0
+    except Exception as e:
+        print(f"Delete document error: {e}")
+        raise
+
+
 def delete_namespace(namespace: str):
     """Delete all data for a namespace."""
     try:

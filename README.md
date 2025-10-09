@@ -58,12 +58,15 @@ AgentKit is a comprehensive AI-powered assistant built with Google's Gemini mode
 - **File Management**: Integrated file upload and management system
 - **Model Selection**: Dynamic picker for available AI models
 
-### 📁 **Advanced File Processing**
+### 📁 **Advanced File Processing & Document Management**
 
 - **Multi-format Support**: PDF, DOCX, TXT, MD, CSV, JSON
 - **Persistent Storage**: Unique file IDs with deduplication and metadata
 - **Smart Processing**: RAG integration for document question-answering
 - **File Management API**: Upload, list, delete, and cleanup operations
+- **Document Management UI**: Search, filter, select, and delete documents with ease
+- **Bulk Operations**: Select multiple documents for batch deletion
+- **Confirmation Dialogs**: Safety prompts for destructive operations
 
 ### ⚡ **Production-Ready Backend**
 

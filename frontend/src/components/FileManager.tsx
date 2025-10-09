@@ -3,8 +3,11 @@ import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { NamespaceSelector } from "./NamespaceSelector";
-import { Trash2, RefreshCw, FolderOpen, File } from "lucide-react";
+import { Trash2, RefreshCw, FolderOpen, File, Search } from "lucide-react";
 import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:8000';
@@ -49,6 +52,13 @@ export function FileManager() {
     const [selectedNamespace, setSelectedNamespace] = useState('default');
     const [namespaceDocuments, setNamespaceDocuments] = useState<NamespaceDocument[]>([]);
     const [isLoadingDocs, setIsLoadingDocs] = useState(false);
+    
+    // Document management state
+    const [searchQuery, setSearchQuery] = useState('');
+    const [selectedDocuments, setSelectedDocuments] = useState<Set<string>>(new Set());
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [documentToDelete, setDocumentToDelete] = useState<NamespaceDocument | null>(null);
+    const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
 
     const loadFiles = async () => {
         setIsLoading(true);
@@ -85,6 +95,8 @@ export function FileManager() {
     const handleNamespaceChange = (namespace: string) => {
         setSelectedNamespace(namespace);
         loadNamespaceDocuments(namespace);
+        setSelectedDocuments(new Set()); // Clear selection when changing namespace
+        setSearchQuery(''); // Clear search
     };
 
     const deleteFile = async (fileId: string) => {
@@ -96,6 +108,62 @@ export function FileManager() {
             console.error('Error deleting file:', err);
         }
     };
+
+    const deleteDocument = async (doc: NamespaceDocument) => {
+        try {
+            await axios.delete(`${API_BASE_URL}/namespaces/${doc.namespace}/documents/${doc.doc_id}`);
+            await loadNamespaceDocuments(selectedNamespace);
+            setSelectedDocuments(new Set()); // Clear selection
+            setDeleteDialogOpen(false);
+            setDocumentToDelete(null);
+        } catch (err) {
+            setError('Failed to delete document');
+            console.error('Error deleting document:', err);
+        }
+    };
+
+    const bulkDeleteDocuments = async () => {
+        try {
+            const deletePromises = Array.from(selectedDocuments).map(docId => 
+                axios.delete(`${API_BASE_URL}/namespaces/${selectedNamespace}/documents/${docId}`)
+            );
+            await Promise.all(deletePromises);
+            await loadNamespaceDocuments(selectedNamespace);
+            setSelectedDocuments(new Set());
+            setBulkDeleteDialogOpen(false);
+        } catch (err) {
+            setError('Failed to delete selected documents');
+            console.error('Error deleting documents:', err);
+        }
+    };
+
+    const toggleDocumentSelection = (docId: string) => {
+        const newSelection = new Set(selectedDocuments);
+        if (newSelection.has(docId)) {
+            newSelection.delete(docId);
+        } else {
+            newSelection.add(docId);
+        }
+        setSelectedDocuments(newSelection);
+    };
+
+    const toggleSelectAll = () => {
+        if (selectedDocuments.size === filteredDocuments.length) {
+            setSelectedDocuments(new Set());
+        } else {
+            setSelectedDocuments(new Set(filteredDocuments.map(doc => doc.doc_id)));
+        }
+    };
+
+    const openDeleteDialog = (doc: NamespaceDocument) => {
+        setDocumentToDelete(doc);
+        setDeleteDialogOpen(true);
+    };
+
+    const filteredDocuments = namespaceDocuments.filter(doc =>
+        doc.filename.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        doc.session_id.toLowerCase().includes(searchQuery.toLowerCase())
+    );
 
     const cleanupOldFiles = async () => {
         try {
@@ -210,9 +278,32 @@ export function FileManager() {
 
                 {/* RAG Documents in Current Namespace */}
                 <div>
-                    <h3 className="text-lg font-semibold mb-3">
-                        RAG Documents in "{selectedNamespace}" ({namespaceDocuments.length})
-                    </h3>
+                    <div className="flex items-center justify-between mb-3">
+                        <h3 className="text-lg font-semibold">
+                            RAG Documents in "{selectedNamespace}" ({filteredDocuments.length}/{namespaceDocuments.length})
+                        </h3>
+                        {selectedDocuments.size > 0 && (
+                            <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => setBulkDeleteDialogOpen(true)}
+                            >
+                                <Trash2 className="w-4 h-4 mr-2" />
+                                Delete Selected ({selectedDocuments.size})
+                            </Button>
+                        )}
+                    </div>
+
+                    {/* Search Bar */}
+                    <div className="relative mb-3">
+                        <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                        <Input
+                            placeholder="Search documents by name or session..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="pl-10"
+                        />
+                    </div>
 
                     {isLoadingDocs ? (
                         <div className="text-center py-8">Loading documents...</div>
@@ -220,27 +311,56 @@ export function FileManager() {
                         <div className="text-center py-8 text-muted-foreground">
                             No documents in this namespace yet
                         </div>
+                    ) : filteredDocuments.length === 0 ? (
+                        <div className="text-center py-8 text-muted-foreground">
+                            No documents match your search
+                        </div>
                     ) : (
-                        <ScrollArea className="h-64">
-                            <div className="space-y-2">
-                                {namespaceDocuments.map((doc) => (
-                                    <Card key={doc.doc_id} className="p-3">
-                                        <div className="flex items-center gap-3">
-                                            <File className="w-5 h-5 text-blue-500" />
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-medium truncate">{doc.filename}</p>
-                                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                                    <Badge variant="outline" className="text-xs">
-                                                        {doc.chunk_count} chunks
-                                                    </Badge>
-                                                    <span>Session: {doc.session_id}</span>
+                        <>
+                            {/* Select All Option */}
+                            {filteredDocuments.length > 0 && (
+                                <div className="flex items-center gap-2 mb-2 p-2 bg-muted rounded-lg">
+                                    <Checkbox
+                                        checked={selectedDocuments.size === filteredDocuments.length && filteredDocuments.length > 0}
+                                        onCheckedChange={toggleSelectAll}
+                                    />
+                                    <span className="text-sm font-medium">Select All</span>
+                                </div>
+                            )}
+                            
+                            <ScrollArea className="h-64">
+                                <div className="space-y-2">
+                                    {filteredDocuments.map((doc) => (
+                                        <Card key={doc.doc_id} className="p-3">
+                                            <div className="flex items-center gap-3">
+                                                <Checkbox
+                                                    checked={selectedDocuments.has(doc.doc_id)}
+                                                    onCheckedChange={() => toggleDocumentSelection(doc.doc_id)}
+                                                />
+                                                <File className="w-5 h-5 text-blue-500" />
+                                                <div className="flex-1 min-w-0">
+                                                    <p className="font-medium truncate">{doc.filename}</p>
+                                                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                                        <Badge variant="outline" className="text-xs">
+                                                            {doc.chunk_count} chunks
+                                                        </Badge>
+                                                        <span>Session: {doc.session_id}</span>
+                                                    </div>
                                                 </div>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="sm"
+                                                    onClick={() => openDeleteDialog(doc)}
+                                                    className="h-8 w-8 p-0 text-red-500 hover:text-red-700"
+                                                >
+                                                    <Trash2 className="w-4 h-4" />
+                                                </Button>
                                             </div>
-                                        </div>
-                                    </Card>
-                                ))}
-                            </div>
-                        </ScrollArea>
+                                        </Card>
+                                    ))}
+                                </div>
+                            </ScrollArea>
+                        </>
                     )}
                 </div>
 
@@ -296,6 +416,61 @@ export function FileManager() {
                     )}
                 </div>
             </CardContent>
+
+            {/* Delete Confirmation Dialog */}
+            <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete Document</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to delete "{documentToDelete?.filename}"?
+                            This will remove {documentToDelete?.chunk_count} chunks from the namespace.
+                            This action cannot be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setDeleteDialogOpen(false)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={() => documentToDelete && deleteDocument(documentToDelete)}
+                        >
+                            Delete
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Bulk Delete Confirmation Dialog */}
+            <Dialog open={bulkDeleteDialogOpen} onOpenChange={setBulkDeleteDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Delete Multiple Documents</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to delete {selectedDocuments.size} selected document(s)?
+                            This action cannot be undone.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setBulkDeleteDialogOpen(false)}
+                        >
+                            Cancel
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={bulkDeleteDocuments}
+                        >
+                            Delete {selectedDocuments.size} Document(s)
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </Card>
     );
 }
