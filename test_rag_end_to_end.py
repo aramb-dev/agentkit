@@ -13,6 +13,7 @@ import asyncio
 import tempfile
 import os
 from pathlib import Path
+import pytest
 
 # Test imports
 from rag.ingest import extract_text_from_pdf, chunk_text, build_doc_chunks
@@ -206,6 +207,7 @@ def test_vector_storage_and_retrieval():
         delete_namespace(test_namespace)
 
 
+@pytest.mark.asyncio
 async def test_rag_tool_with_real_data():
     """Test the RAG tool with actual stored documents."""
     print("\n🔧 Testing RAG tool with real data...")
@@ -264,6 +266,7 @@ async def test_rag_tool_with_real_data():
         delete_namespace(test_namespace)
 
 
+@pytest.mark.asyncio
 async def test_error_handling_empty_namespace():
     """Test error handling when querying empty namespace."""
     print("\n⚠️  Testing error handling for empty namespace...")
