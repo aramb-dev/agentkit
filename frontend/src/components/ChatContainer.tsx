@@ -6,6 +6,7 @@ import type { ChatMessage, ChatState, FileAttachment, AgentResponse, DocumentIng
 import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
 import { MessageInput } from "./MessageInput";
 import { NamespaceSelector } from "./NamespaceSelector";
+import { SearchModeSelector } from "./SearchModeSelector";
 import { Trash2, Bot, Loader2 } from "lucide-react";
 import axios from 'axios';
 
@@ -20,6 +21,7 @@ export function ChatContainer() {
         availableModels: ['gemini-1.5-flash', 'gemini-1.5-pro', 'gemini-2.0-flash'],
         namespace: 'default',
         sessionId: crypto.randomUUID(),
+        searchMode: 'auto',
         error: undefined
     });
 
@@ -273,6 +275,7 @@ export function ChatContainer() {
             formData.append('model', chatState.selectedModel);
             formData.append('namespace', chatState.namespace);
             formData.append('session_id', chatState.sessionId);
+            formData.append('search_mode', chatState.searchMode);
 
             // Add conversation history (last 10 messages for context)
             const historyForContext = chatState.messages.slice(-10).map(msg => ({
@@ -396,6 +399,13 @@ export function ChatContainer() {
         }));
     };
 
+    const handleSearchModeChange = (searchMode: 'auto' | 'web' | 'documents' | 'hybrid') => {
+        setChatState(prev => ({
+            ...prev,
+            searchMode
+        }));
+    };
+
     return (
         <div className="flex flex-col h-screen max-w-4xl mx-auto p-4">
             <Card className="flex-1 flex flex-col">
@@ -407,6 +417,12 @@ export function ChatContainer() {
                     </div>
 
                     <div className="flex items-center gap-4">
+                        {/* Search Mode Selector */}
+                        <SearchModeSelector
+                            selectedMode={chatState.searchMode}
+                            onModeChange={handleSearchModeChange}
+                        />
+
                         {/* Namespace Selector */}
                         <NamespaceSelector
                             selectedNamespace={chatState.namespace}

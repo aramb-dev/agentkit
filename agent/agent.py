@@ -74,8 +74,9 @@ async def run_agent_with_history(
     conversation_history: List[Dict],
     namespace: str = "default",
     session_id: str = "default",
+    search_mode: str = "auto",
 ) -> Dict[str, str]:
-    """Entry point used by the FastAPI app with conversation history support."""
+    """Entry point used by the FastAPI app with conversation history and search mode support."""
     import time
     start_time = time.time()
 
@@ -138,8 +139,17 @@ async def run_agent_with_history(
             # Chain failed, fall back to single tool
             print(f"Tool chain failed: {chain_result.error}, falling back to single tool")
 
-    # Standard single tool execution
-    tool_name = await select_tool(f"Current message: {message}", f"Recent conversation:\n{recent_context}")
+    # Standard single tool execution with search mode override
+    if search_mode == "web":
+        tool_name = "web"
+    elif search_mode == "documents":
+        tool_name = "rag"
+    elif search_mode == "hybrid":
+        tool_name = "hybrid"
+    else:
+        # Auto mode - let the router decide
+        tool_name = await select_tool(f"Current message: {message}", f"Recent conversation:\n{recent_context}")
+    
     tool = TOOLS[tool_name]
 
     # Execute single tool with error handling
@@ -150,7 +160,11 @@ async def run_agent_with_history(
         # Handle RAG tool with namespace parameter
         if tool_name == "rag":
             from .tools import _retrieve_context
-            tool_output = _retrieve_context(message, namespace=namespace)
+            tool_output = await _retrieve_context(message, namespace=namespace)
+        # Handle hybrid tool with namespace parameter
+        elif tool_name == "hybrid":
+            from .tools import _hybrid_search
+            tool_output = await _hybrid_search(message, namespace=namespace)
         else:
             tool_output = await tool.run(message)
     except Exception as e:

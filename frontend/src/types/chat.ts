@@ -8,6 +8,14 @@ export interface ChatMessage {
     attachments?: FileAttachment[];
     error?: boolean;
     retryHandler?: () => void;
+    citations?: Citation[]; // Source citations for the response
+}
+
+export interface Citation {
+    source: string;
+    chunk?: number;
+    relevance?: number;
+    type: 'document' | 'web';
 }
 
 export interface FileAttachment {
@@ -35,6 +43,7 @@ export interface ChatState {
     availableModels: string[];
     namespace: string; // RAG namespace for document isolation
     sessionId: string; // Session ID for conversation context
+    searchMode: 'auto' | 'web' | 'documents' | 'hybrid'; // Search mode preference
     error?: string;
 }
 
