@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { NamespaceSelector } from "./NamespaceSelector";
-import { Trash2, RefreshCw, FolderOpen, File, Search, CheckSquare, Square } from "lucide-react";
+import { Trash2, RefreshCw, FolderOpen, File, Search } from "lucide-react";
 import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:8000';

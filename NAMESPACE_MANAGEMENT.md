@@ -229,12 +229,36 @@ The namespace system integrates with AgentKit's LLM-powered tool routing:
 - API endpoints maintain existing functionality
 - Chat interface enhanced without breaking changes
 
+## Document Management Features
+
+### ✅ Individual Document Operations
+- **Delete Documents**: Remove individual documents with confirmation dialog
+- **Document Metadata**: View filename, chunk count, and session ID for each document
+- **Visual Indicators**: File icons and badges for easy identification
+
+### ✅ Bulk Document Operations
+- **Multi-Select**: Select multiple documents using checkboxes
+- **Bulk Delete**: Delete multiple selected documents at once
+- **Select All**: Quickly select all documents in the current view
+- **Selection Counter**: Visual feedback showing number of selected documents
+
+### ✅ Search and Filter
+- **Real-time Search**: Filter documents by filename or session ID
+- **Live Counter**: Shows filtered count vs total count (e.g., "2/5")
+- **Clear Search**: Easy to clear search and view all documents
+
+### ✅ User Experience
+- **Confirmation Dialogs**: Safety prompts before destructive operations
+- **Real-time Updates**: Document list refreshes automatically after changes
+- **Error Handling**: Clear error messages for failed operations
+- **Loading States**: Visual feedback during API operations
+
 ## Future Enhancements
 
 ### Potential Improvements
 - Namespace templates for common use cases
-- Bulk document operations across namespaces
 - Namespace sharing and collaboration features
-- Advanced filtering and search within namespaces
 - Import/export functionality for namespace data
 - Namespace-level access controls and permissions
+- Document versioning and history
+- Advanced metadata filtering (by date, size, type)
