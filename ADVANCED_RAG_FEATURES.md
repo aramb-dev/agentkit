@@ -299,6 +299,245 @@ Web search results for 'Current weather in San Francisco':
 - Automatically routes to RAG tool
 - Returns document-based response with citations
 
+## End-to-End RAG Integration Workflow
+
+### Complete Setup and Usage Guide
+
+This section walks through the full RAG integration from installation to querying documents.
+
+#### Step 1: Installation and Setup
+
+**Install Required Dependencies:**
+```bash
+pip install -r requirements.txt
+```
+
+This includes:
+- `chromadb` - Vector database for embeddings storage
+- `sentence-transformers` - For generating embeddings
+- `pypdf` - For PDF text extraction
+
+**Verify Installation:**
+```python
+from agent.tools import RAG_AVAILABLE, vector_query
+print(f"RAG Available: {RAG_AVAILABLE}")  # Should be True
+```
+
+#### Step 2: Document Ingestion
+
+**Upload Documents via API:**
+```bash
+curl -X POST "http://localhost:8000/docs/ingest" \
+  -H "Content-Type: multipart/form-data" \
+  -F "file=@your_document.pdf" \
+  -F "namespace=my_namespace" \
+  -F "session_id=my_session"
+```
+
+**Or via Frontend:**
+1. Click the file upload button in the chat interface
+2. Select or drag-and-drop a PDF file
+3. Wait for processing (shows progress indicator)
+4. Document is automatically ingested into your namespace
+
+**What Happens During Ingestion:**
+1. PDF text is extracted using PyPDF2
+2. Text is chunked into ~900 character segments with 150 character overlap
+3. Each chunk is embedded using sentence-transformers (all-MiniLM-L6-v2)
+4. Embeddings are stored in ChromaDB with metadata
+5. Chunks are associated with namespace for isolation
+
+**API Response:**
+```json
+{
+  "status": "success",
+  "message": "Document ingested successfully",
+  "chunks": 15,
+  "namespace": "my_namespace",
+  "filename": "your_document.pdf",
+  "doc_id": "uuid-here"
+}
+```
+
+#### Step 3: Querying Documents
+
+**Via Chat Interface:**
+1. Type your question in the chat
+2. Select "Documents" search mode (or leave on "Auto")
+3. Agent automatically retrieves relevant chunks
+4. Response includes citations and relevance scores
+
+**Via API:**
+```bash
+curl -X POST "http://localhost:8000/chat" \
+  -F "message=What is the main topic?" \
+  -F "model=gemini-2.0-flash-001" \
+  -F "namespace=my_namespace" \
+  -F "search_mode=documents"
+```
+
+**Programmatic Access:**
+```python
+from agent.tools import _retrieve_context
+
+# Query documents
+result = await _retrieve_context(
+    query="What is the authentication process?",
+    namespace="my_namespace",
+    k=5  # Number of chunks to retrieve
+)
+print(result)
+```
+
+#### Step 4: Understanding Results
+
+**Result Format:**
+```
+RAG search results for 'query' in namespace 'my_namespace' (as of timestamp):
+
+**Source [1]: document.pdf** (chunk #3, relevance: 87.3%)
+[Retrieved text content from chunk 3...]
+
+**Source [2]: document.pdf** (chunk #7, relevance: 82.1%)
+[Retrieved text content from chunk 7...]
+
+---
+**Citations:**
+[1] document.pdf, chunk 3 (relevance: 87.30%)
+[2] document.pdf, chunk 7 (relevance: 82.10%)
+```
+
+**Understanding Relevance Scores:**
+- **90-100%**: Excellent match - very relevant
+- **75-89%**: Good match - relevant information
+- **60-74%**: Fair match - may contain some relevant info
+- **Below 60%**: Poor match - may not be directly relevant
+
+#### Step 5: Advanced Features
+
+**Hybrid Search (Combine Web + Documents):**
+```python
+from agent.tools import _hybrid_search
+
+result = await _hybrid_search(
+    query="Latest Python features vs our coding standards",
+    namespace="company_docs"
+)
+```
+
+**Query Enhancement (Automatic):**
+The system automatically enhances queries using LLM:
+```
+Original: "Could you tell me about the system architecture?"
+Enhanced: "system architecture"
+```
+
+**Namespace Isolation:**
+Documents in different namespaces are completely isolated:
+```python
+# Upload to namespace 'project_a'
+upsert_chunks('project_a', chunks_a)
+
+# Upload to namespace 'project_b'
+upsert_chunks('project_b', chunks_b)
+
+# Queries only search their specific namespace
+results_a = vector_query('project_a', 'architecture', k=5)
+results_b = vector_query('project_b', 'architecture', k=5)
+```
+
+#### Step 6: Error Handling
+
+**No Documents Found:**
+```
+[RAG] No relevant documents found in namespace 'namespace' for query: 'query'
+
+This could mean:
+1. No documents have been ingested yet
+2. The documents don't contain relevant information
+3. Try a different search term or upload relevant documents first
+```
+
+**RAG System Unavailable:**
+If ChromaDB or dependencies aren't installed:
+```
+[RAG System Unavailable]
+
+The document retrieval system (RAG) is currently not available.
+Install dependencies: pip install chromadb sentence-transformers
+```
+
+**Vector Store Error:**
+```python
+try:
+    result = await _retrieve_context(query, namespace, k=5)
+except Exception as e:
+    print(f"RAG Error: {e}")
+    # Falls back gracefully
+```
+
+#### Step 7: Testing Your Integration
+
+**Run End-to-End Tests:**
+```bash
+python test_rag_end_to_end.py
+```
+
+This tests:
+- RAG system availability
+- PDF text extraction
+- Text chunking
+- Vector storage and retrieval
+- RAG tool integration
+- Error handling
+- Namespace isolation
+
+**Manual Testing Workflow:**
+```bash
+# 1. Start the backend
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# 2. Upload a test document
+curl -X POST "http://localhost:8000/docs/ingest" \
+  -F "file=@test_doc.pdf" \
+  -F "namespace=test"
+
+# 3. Query the document
+curl -X POST "http://localhost:8000/chat" \
+  -F "message=What does the document say?" \
+  -F "model=gemini-2.0-flash-001" \
+  -F "namespace=test" \
+  -F "search_mode=documents"
+
+# 4. Verify response includes citations
+```
+
+#### Technical Details
+
+**Vector Store Location:**
+- ChromaDB data: `uploads/chroma/`
+- Persistent storage across restarts
+- Automatically created on first use
+
+**Embedding Model:**
+- Model: `sentence-transformers/all-MiniLM-L6-v2`
+- Dimension: 384
+- Fast inference: ~50ms per query
+- Good balance of speed and quality
+
+**Chunking Strategy:**
+- Chunk size: 900 characters
+- Overlap: 150 characters
+- Sentence-aware splitting
+- Preserves context across boundaries
+
+**Relevance Calculation:**
+```python
+# ChromaDB returns L2 distance (lower = more similar)
+# Convert to 0-1 relevance score (higher = more relevant)
+relevance_score = 1.0 / (1.0 + distance)
+```
+
 ## Configuration
 
 ### Environment Variables
