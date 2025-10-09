@@ -23,22 +23,27 @@ fi
 echo "📋 Running Backend Tests..."
 echo "---------------------------"
 
-# Run backend tests
+# Run backend tests with coverage
 if command -v pytest &> /dev/null; then
-    echo "Running pytest tests..."
-    python -m pytest test_*.py -v
+    echo "Running pytest tests with coverage..."
+    python -m pytest test_*.py -v --cov=agent --cov=app --cov=rag --cov-report=term-missing --cov-report=html
     backend_result=$?
 else
     echo "❌ pytest not found. Installing test dependencies..."
-    pip install pytest pytest-asyncio httpx
+    pip install pytest pytest-asyncio pytest-cov httpx
     if [ $? -eq 0 ]; then
         echo "✅ Test dependencies installed. Running tests..."
-        python -m pytest test_*.py -v
+        python -m pytest test_*.py -v --cov=agent --cov=app --cov=rag --cov-report=term-missing --cov-report=html
         backend_result=$?
     else
         echo "❌ Failed to install test dependencies"
         backend_result=1
     fi
+fi
+
+if [ $backend_result -eq 0 ]; then
+    echo ""
+    echo "📊 Coverage report generated in htmlcov/index.html"
 fi
 
 echo
@@ -47,15 +52,27 @@ echo "----------------------------"
 
 cd frontend
 
-# Check if test command exists
-if npm run test --silent &> /dev/null; then
+# Check if node_modules exists
+if [ ! -d "node_modules" ]; then
+    echo "Installing frontend dependencies..."
+    npm install
+fi
+
+# Check if vitest is installed
+if command -v npx &> /dev/null && npx vitest --version &> /dev/null; then
     echo "Running frontend tests..."
-    npm test
+    npm test -- --run
     frontend_result=$?
+    
+    if [ $frontend_result -eq 0 ]; then
+        echo ""
+        echo "📊 Running frontend tests with coverage..."
+        npm run test:coverage -- --run
+    fi
 else
-    echo "ℹ️  Frontend tests available but require setup:"
+    echo "ℹ️  Frontend tests not configured. To set up:"
     echo "   cd frontend"
-    echo "   npm install --save-dev vitest @testing-library/react @testing-library/jest-dom jsdom"
+    echo "   npm install"
     echo "   npm test"
     frontend_result=0  # Don't fail for optional frontend tests
 fi

@@ -9,6 +9,7 @@ python-docx
 python-multipart
 pytest
 pytest-asyncio
+pytest-cov
 httpx
 pypdf
 chromadb
