@@ -2,6 +2,13 @@ from typing import List, Dict
 from pypdf import PdfReader
 import uuid
 import re
+from pathlib import Path
+
+try:
+    import docx
+    DOCX_AVAILABLE = True
+except ImportError:
+    DOCX_AVAILABLE = False
 
 
 def extract_text_from_pdf(file_path: str) -> str:
@@ -14,6 +21,47 @@ def extract_text_from_pdf(file_path: str) -> str:
         except Exception:
             texts.append("")
     return "\n".join(texts)
+
+
+def extract_text_from_docx(file_path: str) -> str:
+    """Extract text content from a DOCX file."""
+    if not DOCX_AVAILABLE:
+        raise ImportError("python-docx not installed. Run: pip install python-docx")
+    
+    doc = docx.Document(file_path)
+    texts = []
+    for paragraph in doc.paragraphs:
+        texts.append(paragraph.text)
+    return "\n".join(texts)
+
+
+def extract_text_from_txt(file_path: str) -> str:
+    """Extract text content from a TXT file."""
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        return f.read()
+
+
+def extract_text_from_md(file_path: str) -> str:
+    """Extract text content from a Markdown file."""
+    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+        return f.read()
+
+
+def extract_text_from_file(file_path: str) -> str:
+    """Extract text from a file based on its extension."""
+    path = Path(file_path)
+    extension = path.suffix.lower()
+    
+    if extension == '.pdf':
+        return extract_text_from_pdf(file_path)
+    elif extension == '.docx':
+        return extract_text_from_docx(file_path)
+    elif extension == '.txt':
+        return extract_text_from_txt(file_path)
+    elif extension in ['.md', '.markdown']:
+        return extract_text_from_md(file_path)
+    else:
+        raise ValueError(f"Unsupported file extension: {extension}")
 
 
 def chunk_text(text: str, chunk_size: int = 900, overlap: int = 150) -> List[str]:
@@ -43,8 +91,8 @@ def chunk_text(text: str, chunk_size: int = 900, overlap: int = 150) -> List[str
 
 
 def build_doc_chunks(file_path: str, metadata: Dict) -> List[Dict]:
-    """Extract text from PDF and build document chunks with metadata."""
-    text = extract_text_from_pdf(file_path)
+    """Extract text from document and build document chunks with metadata."""
+    text = extract_text_from_file(file_path)
     chunks = chunk_text(text)
     doc_id = metadata.get("doc_id") or str(uuid.uuid4())
 
