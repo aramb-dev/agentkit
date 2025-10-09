@@ -2,11 +2,12 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Button } from "@/components/ui/button";
-import type { ChatMessage, ChatState, FileAttachment, AgentResponse, DocumentIngestResponse } from "@/types/chat";
+import type { ChatMessage, ChatState, FileAttachment, AgentResponse, DocumentIngestResponse, Conversation } from "@/types/chat";
 import { ChatMessage as ChatMessageComponent } from "./ChatMessage";
 import { MessageInput } from "./MessageInput";
 import { NamespaceSelector } from "./NamespaceSelector";
 import { SearchModeSelector } from "./SearchModeSelector";
+import { ConversationHistory } from "./ConversationHistory";
 import { Trash2, Bot, Loader2 } from "lucide-react";
 import axios from 'axios';
 
@@ -486,8 +487,53 @@ export function ChatContainer() {
         }));
     };
 
+    const handleLoadConversation = async (conversation: Conversation) => {
+        try {
+            // Fetch full conversation with messages
+            const response = await axios.get<Conversation>(`${API_BASE_URL}/conversations/${conversation.id}`);
+            const conv = response.data;
+            
+            if (!conv.messages) return;
+            
+            // Convert conversation messages to chat messages
+            const chatMessages: ChatMessage[] = conv.messages.map(msg => ({
+                id: msg.id,
+                content: msg.content,
+                role: msg.role,
+                timestamp: new Date(msg.timestamp),
+                model: msg.model,
+                toolUsed: msg.tool_used,
+                citations: msg.citations
+            }));
+            
+            // Update chat state with loaded conversation
+            setChatState(prev => ({
+                ...prev,
+                messages: chatMessages,
+                sessionId: conv.session_id,
+                namespace: conv.namespace,
+                error: undefined
+            }));
+        } catch (error) {
+            console.error('Failed to load conversation:', error);
+            setChatState(prev => ({
+                ...prev,
+                error: 'Failed to load conversation'
+            }));
+        }
+    };
+
     return (
-        <div className="flex flex-col h-screen max-w-4xl mx-auto p-4">
+        <div className="flex h-screen">
+            {/* Conversation History Sidebar */}
+            <ConversationHistory 
+                onSelectConversation={handleLoadConversation}
+                currentSessionId={chatState.sessionId}
+                namespace={chatState.namespace}
+            />
+            
+            {/* Main Chat Area */}
+            <div className="flex-1 flex flex-col max-w-4xl mx-auto p-4 w-full">
             <Card className="flex-1 flex flex-col">
                 {/* Header */}
                 <CardHeader className="flex-row items-center justify-between space-y-0 pb-4">
@@ -587,6 +633,7 @@ export function ChatContainer() {
                     </div>
                 </CardContent>
             </Card>
+            </div>
         </div>
     );
 }
