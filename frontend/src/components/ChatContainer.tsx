@@ -157,7 +157,7 @@ export function ChatContainer() {
                 if (error.response?.status === 413) {
                     errorDetails = '\n**Reason:** File size too large (max 10MB allowed)';
                 } else if (error.response?.status === 400) {
-                    errorDetails = '\n**Reason:** Unsupported file format (only PDFs supported)';
+                    errorDetails = '\n**Reason:** Unsupported file format (supported: PDF, DOCX, TXT, MD)';
                 } else if (error.code === 'NETWORK_ERROR') {
                     errorDetails = '\n**Reason:** Network connection issue';
                 } else {
@@ -170,7 +170,7 @@ export function ChatContainer() {
                 content: `❌ **Failed to process ${file.name}**${errorDetails}
 
 🔧 **What you can try:**
-• Check file format (PDFs work best)
+• Check file format (supported: PDF, DOCX, TXT, MD)
 • Ensure file size is under 10MB
 • Check your internet connection
 • Try uploading again

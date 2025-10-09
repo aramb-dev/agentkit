@@ -9,10 +9,10 @@ AgentKit includes a fully integrated RAG (Retrieval-Augmented Generation) system
 All acceptance criteria have been met:
 
 - ✅ **RAG tool connected to actual vector store**: Uses ChromaDB for persistent vector storage
-- ✅ **Document retrieval works end-to-end**: Full pipeline from PDF upload to query response
+- ✅ **Document retrieval works end-to-end**: Full pipeline from document upload to query response (supports PDF, DOCX, TXT, MD)
 - ✅ **QA responses based on real document embeddings**: Semantic search using sentence-transformers
 - ✅ **No hardcoded document sources**: Fallback messages only, no static documentation
-- ✅ **PDF upload → question → answer workflow**: Tested and verified
+- ✅ **Document upload → question → answer workflow**: Tested and verified (PDF, DOCX, TXT, MD)
 - ✅ **Proper error handling**: Clear messages for missing documents and system errors
 - ✅ **Complete documentation**: This guide plus ADVANCED_RAG_FEATURES.md
 
@@ -30,11 +30,11 @@ All acceptance criteria have been met:
 │  │   (React)    │     │   Backend    │    │   Router     │ │
 │  └──────────────┘     └──────────────┘    └──────────────┘ │
 │         │                     │                    │         │
-│         │ Upload PDF          │ Ingest             │ Query   │
+│         │ Upload Documents    │ Ingest             │ Query   │
 │         ▼                     ▼                    ▼         │
 │  ┌──────────────┐     ┌──────────────┐    ┌──────────────┐ │
-│  │ File Upload  │     │  PDF Parser  │    │  RAG Tool    │ │
-│  │  Component   │     │  (PyPDF2)    │    │              │ │
+│  │ File Upload  │     │Doc Processor │    │  RAG Tool    │ │
+│  │  Component   │     │(Multi-format)│    │              │ │
 │  └──────────────┘     └──────────────┘    └──────────────┘ │
 │                              │                    │         │
 │                              ▼                    │         │
@@ -62,7 +62,7 @@ All acceptance criteria have been met:
 
 1. **Document Ingestion**
    ```
-   PDF Upload → Text Extraction → Chunking → Embedding → Vector Storage
+   Document Upload (PDF/DOCX/TXT/MD) → Text Extraction → Chunking → Embedding → Vector Storage
    ```
 
 2. **Query Processing**
@@ -87,6 +87,7 @@ Required packages:
 - `chromadb` - Vector database
 - `sentence-transformers` - Embedding generation
 - `pypdf` - PDF text extraction
+- `python-docx` - DOCX text extraction
 - `fastapi` - API backend
 - `google-genai` - LLM integration
 
@@ -272,13 +273,14 @@ namespace = "default" # Namespace for document isolation
 ### API Configuration
 
 **Endpoints:**
-- `POST /docs/ingest` - Upload and process documents
+- `POST /docs/ingest` - Upload and process documents (supports PDF, DOCX, TXT, MD)
 - `POST /chat` - Query with RAG support
 - `GET /models` - List available models
 
 **File Limits:**
 ```python
 MAX_FILE_SIZE = 10485760  # 10MB
+SUPPORTED_FORMATS = ['.pdf', '.docx', '.txt', '.md', '.markdown']
 ```
 
 ## Error Handling
@@ -321,17 +323,21 @@ pip install chromadb sentence-transformers
 
 ### Document Processing Error
 
-**Scenario:** PDF processing fails
+**Scenario:** Document processing fails
 
 **Possible Causes:**
-- Corrupted PDF
-- Password-protected PDF
-- File too large
+- Corrupted file
+- Unsupported file format (only PDF, DOCX, TXT, MD supported)
+- Password-protected PDF or DOCX
+- File too large (> 10MB)
+- Missing dependencies (e.g., python-docx for DOCX files)
 
 **Solution:**
-- Verify PDF is valid
+- Verify file is valid and not corrupted
+- Check file format is supported (PDF, DOCX, TXT, MD)
 - Check file size < 10MB
-- Ensure PDF is not encrypted
+- Ensure PDF/DOCX is not password-protected
+- Install required dependencies: `pip install python-docx pypdf`
 
 ## Performance Optimization
 

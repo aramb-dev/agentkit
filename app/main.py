@@ -176,17 +176,27 @@ async def ingest_doc(
     """
     Ingest a document into the vector store for RAG retrieval.
 
-    This endpoint processes uploaded files (especially PDFs) by:
+    This endpoint processes uploaded files (PDF, DOCX, TXT, MD) by:
     1. Extracting text content
     2. Chunking the text into searchable segments
     3. Generating embeddings and storing in vector database
     4. Associating chunks with namespace for isolation
+    
+    Supported formats: PDF, DOCX, TXT, MD
     """
     # Validate file type
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
+    SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.txt', '.md', '.markdown']
+    if not file.filename:
         raise HTTPException(
             status_code=400,
-            detail="Currently only PDF files are supported for RAG ingestion",
+            detail="Filename is required",
+        )
+    
+    file_ext = os.path.splitext(file.filename.lower())[1]
+    if file_ext not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file format. Supported formats: {', '.join(SUPPORTED_EXTENSIONS)}",
         )
 
     # Check file size
@@ -198,7 +208,8 @@ async def ingest_doc(
         )
 
     # Save temporary file for processing
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+    file_ext = os.path.splitext(file.filename.lower())[1]
+    with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as tmp_file:
         tmp_file.write(content)
         tmp_path = tmp_file.name
 
