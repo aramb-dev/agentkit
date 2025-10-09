@@ -70,6 +70,18 @@ AgentKit is a comprehensive AI-powered assistant built with Google's Gemini mode
 - **Smart Search Triggers**: Automatically searches when queries need current data
 - **Contextual Results**: Seamlessly integrates search results into responses
 
+### 💾 **Conversation Persistence** ✨ NEW!
+
+- **Automatic Saving**: All conversations automatically saved to SQLite database
+- **Conversation History Sidebar**: Visual history with search and filtering
+- **Full-Text Search**: Find past conversations by content or title
+- **Export Options**: Download conversations in JSON, TXT, or Markdown format
+- **Namespace Organization**: Isolate conversations by project or context
+- **Message Management**: Complete CRUD operations for conversations
+- **Real-time Updates**: History updates as you chat
+
+📖 **See [CONVERSATION_PERSISTENCE.md](CONVERSATION_PERSISTENCE.md) for complete guide**
+
 ### 🖥️ **Modern React Frontend**
 
 - **Professional UI**: Built with React, TypeScript, Vite, and Shadcn/ui

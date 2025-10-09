@@ -112,16 +112,20 @@ class TestMultiFormatIngestion:
                     data={"namespace": "test", "session_id": "test"}
                 )
                 assert response.status_code == 400
-                assert "Unsupported file format" in response.json()["detail"]
+                response_json = response.json()
+                # Check structured error response format
+                assert "error" in response_json
+                assert "Unsupported file format" in response_json["error"]["message"]
         finally:
             os.unlink(tmp_path)
 
     def test_file_too_large_rejected(self):
-        """Test that files larger than 10MB are rejected."""
-        # Create a large file
+        """Test that files larger than MAX_FILE_SIZE (50MB) are rejected."""
+        # Create a large file - just over 50MB
+        from app.main import MAX_FILE_SIZE
         with tempfile.NamedTemporaryFile(suffix=".txt", delete=False) as tmp_file:
-            # Write more than 10MB
-            tmp_file.write(b"x" * (11 * 1024 * 1024))
+            # Write just over MAX_FILE_SIZE
+            tmp_file.write(b"x" * (MAX_FILE_SIZE + 1024))
             tmp_path = tmp_file.name
 
         try:
@@ -132,7 +136,10 @@ class TestMultiFormatIngestion:
                     data={"namespace": "test", "session_id": "test"}
                 )
                 assert response.status_code == 413
-                assert "too large" in response.json()["detail"].lower()
+                response_json = response.json()
+                # Check structured error response format
+                assert "error" in response_json
+                assert "too large" in response_json["error"]["message"].lower()
         finally:
             os.unlink(tmp_path)
 
