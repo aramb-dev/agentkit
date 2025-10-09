@@ -6,17 +6,21 @@ from typing import List, Optional
 load_dotenv()
 
 # Configuration from environment variables
-MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", "10485760"))  # 10MB default
+MAX_FILE_SIZE = int(os.getenv("MAX_FILE_SIZE", "52428800"))  # 50MB default
 CONVERSATION_HISTORY_LIMIT = int(
     os.getenv("CONVERSATION_HISTORY_LIMIT", "50")
 )  # 50 messages default
+ENABLE_RETRY_LOGIC = os.getenv("ENABLE_RETRY_LOGIC", "true").lower() == "true"
+MAX_RETRY_ATTEMPTS = int(os.getenv("MAX_RETRY_ATTEMPTS", "3"))
+RETRY_DELAY_SECONDS = int(os.getenv("RETRY_DELAY_SECONDS", "1"))
 
 # Add the parent directory to Python path so we can import the agent module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field, validator
 from typing import List, Optional, Dict, Any
 from agent.agent import run_agent_with_history
 from agent.llm_client import llm_client
@@ -24,8 +28,18 @@ from agent.document_processor import DocumentProcessor
 from agent.file_manager import file_manager
 import uuid
 import tempfile
+import logging
+import traceback
+from datetime import datetime
 from rag.ingest import build_doc_chunks
 from rag.store import upsert_chunks, list_collections, delete_namespace, get_collection, delete_document
+
+# Configure logging for error tracking
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="AgentKit Chat API", version="1.0.0")
 
@@ -37,6 +51,90 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# Global exception handler for standardized error responses
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """Handle HTTP exceptions with standardized error format."""
+    error_code = ErrorCodes.INTERNAL_ERROR
+    retry_after = None
+    
+    # Map HTTP status codes to error codes
+    if exc.status_code == 413:
+        error_code = ErrorCodes.FILE_TOO_LARGE
+    elif exc.status_code == 400:
+        error_code = ErrorCodes.VALIDATION_ERROR
+    elif exc.status_code == 404:
+        error_code = ErrorCodes.NOT_FOUND
+    elif exc.status_code == 409:
+        error_code = ErrorCodes.CONFLICT
+    elif exc.status_code == 429:
+        error_code = ErrorCodes.RATE_LIMIT_EXCEEDED
+        retry_after = 60
+    elif exc.status_code >= 500:
+        error_code = ErrorCodes.INTERNAL_ERROR
+    
+    # Log the error
+    logger.error(f"HTTP {exc.status_code}: {exc.detail} - Path: {request.url.path}")
+    
+    error_response = ErrorResponse(
+        error=ErrorDetail(
+            code=error_code,
+            message=str(exc.detail),
+            details={"status_code": exc.status_code, "path": str(request.url.path)},
+            retry_after=retry_after
+        ),
+        request_id=request.headers.get("X-Request-ID")
+    )
+    
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=error_response.model_dump()
+    )
+
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request: Request, exc: Exception):
+    """Handle unexpected exceptions with standardized error format."""
+    # Log the full error with traceback
+    logger.error(f"Unhandled exception: {str(exc)}\n{traceback.format_exc()}")
+    
+    error_response = ErrorResponse(
+        error=ErrorDetail(
+            code=ErrorCodes.INTERNAL_ERROR,
+            message="An unexpected error occurred. Please try again later.",
+            details={
+                "error_type": type(exc).__name__,
+                "path": str(request.url.path)
+            } if os.getenv("DEBUG") else None
+        ),
+        request_id=request.headers.get("X-Request-ID")
+    )
+    
+    return JSONResponse(
+        status_code=500,
+        content=error_response.model_dump()
+    )
+
+
+# Request validation middleware
+@app.middleware("http")
+async def validate_request_middleware(request: Request, call_next):
+    """Add request ID and perform basic validation."""
+    # Add unique request ID for tracing
+    request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    
+    # Log incoming request
+    logger.info(f"Request {request_id}: {request.method} {request.url.path}")
+    
+    try:
+        response = await call_next(request)
+        response.headers["X-Request-ID"] = request_id
+        return response
+    except Exception as e:
+        logger.error(f"Request {request_id} failed: {str(e)}")
+        raise
 
 
 class ChatMessage(BaseModel):
@@ -54,6 +152,42 @@ class ChatRequest(BaseModel):
 class ModelResponse(BaseModel):
     available_models: List[str]
     default_model: str
+
+
+class ErrorDetail(BaseModel):
+    """Standardized error detail structure."""
+    code: str = Field(..., description="Error code identifier")
+    message: str = Field(..., description="Human-readable error message")
+    details: Optional[Dict[str, Any]] = Field(None, description="Additional error context")
+    timestamp: str = Field(default_factory=lambda: datetime.now().isoformat())
+    retry_after: Optional[int] = Field(None, description="Seconds to wait before retry")
+
+
+class ErrorResponse(BaseModel):
+    """Standardized error response format."""
+    success: bool = False
+    error: ErrorDetail
+    request_id: Optional[str] = None
+
+
+class ValidationError(BaseModel):
+    """Validation error details."""
+    field: str
+    message: str
+    value: Optional[Any] = None
+
+
+# Error code constants
+class ErrorCodes:
+    FILE_TOO_LARGE = "FILE_TOO_LARGE"
+    UNSUPPORTED_FORMAT = "UNSUPPORTED_FORMAT"
+    VALIDATION_ERROR = "VALIDATION_ERROR"
+    PROCESSING_ERROR = "PROCESSING_ERROR"
+    NETWORK_ERROR = "NETWORK_ERROR"
+    RATE_LIMIT_EXCEEDED = "RATE_LIMIT_EXCEEDED"
+    INTERNAL_ERROR = "INTERNAL_ERROR"
+    NOT_FOUND = "NOT_FOUND"
+    CONFLICT = "CONFLICT"
 
 
 @app.post("/chat")
@@ -91,12 +225,13 @@ async def chat(
             if file.filename:
                 content = await file.read()
 
-                # Check file size limit
-                if len(content) > MAX_FILE_SIZE:
-                    raise HTTPException(
-                        status_code=413,
-                        detail=f"File '{file.filename}' is too large. Maximum size allowed: {MAX_FILE_SIZE / (1024*1024):.1f}MB",
-                    )
+                # Validate file with comprehensive checks
+                try:
+                    validation_result = validate_file_upload(file, content)
+                    logger.info(f"Chat file validated: {validation_result['filename']}")
+                except HTTPException as e:
+                    logger.error(f"Chat file validation failed: {e.detail}")
+                    raise
 
                 # Store file permanently
                 file_metadata = await file_manager.store_file(
@@ -167,6 +302,75 @@ async def get_models():
     return ModelResponse(available_models=available_models, default_model=default_model)
 
 
+# File validation constants
+SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.txt', '.md', '.markdown', '.json']
+SUPPORTED_MIME_TYPES = {
+    'application/pdf': '.pdf',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+    'text/plain': '.txt',
+    'text/markdown': '.md',
+    'application/json': '.json'
+}
+
+
+def validate_file_upload(file: UploadFile, content: bytes) -> Dict[str, Any]:
+    """
+    Validate file upload with comprehensive checks.
+    
+    Returns validation result with details.
+    Raises HTTPException if validation fails.
+    """
+    errors = []
+    
+    # Check if filename exists
+    if not file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Filename is required"
+        )
+    
+    # Check for potentially malicious filenames (BEFORE extension check)
+    if '..' in file.filename or '/' in file.filename or '\\' in file.filename:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid filename: path traversal detected"
+        )
+    
+    # Validate file extension
+    file_ext = os.path.splitext(file.filename.lower())[1]
+    if file_ext not in SUPPORTED_EXTENSIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file format '{file_ext}'. Supported formats: {', '.join(SUPPORTED_EXTENSIONS)}"
+        )
+    
+    # Validate MIME type
+    if file.content_type and file.content_type not in SUPPORTED_MIME_TYPES:
+        logger.warning(f"Unexpected MIME type: {file.content_type} for file: {file.filename}")
+    
+    # Check file size
+    file_size = len(content)
+    if file_size == 0:
+        raise HTTPException(
+            status_code=400,
+            detail="File is empty"
+        )
+    
+    if file_size > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large ({file_size / (1024*1024):.2f}MB). Maximum size: {MAX_FILE_SIZE / (1024*1024):.0f}MB"
+        )
+    
+    return {
+        "valid": True,
+        "filename": file.filename,
+        "size": file_size,
+        "extension": file_ext,
+        "mime_type": file.content_type
+    }
+
+
 @app.post("/docs/ingest")
 async def ingest_doc(
     file: UploadFile = File(...),
@@ -176,36 +380,26 @@ async def ingest_doc(
     """
     Ingest a document into the vector store for RAG retrieval.
 
-    This endpoint processes uploaded files (PDF, DOCX, TXT, MD) by:
-    1. Extracting text content
-    2. Chunking the text into searchable segments
-    3. Generating embeddings and storing in vector database
-    4. Associating chunks with namespace for isolation
+    This endpoint processes uploaded files (PDF, DOCX, TXT, MD, JSON) by:
+    1. Validating file type and size
+    2. Extracting text content
+    3. Chunking the text into searchable segments
+    4. Generating embeddings and storing in vector database
+    5. Associating chunks with namespace for isolation
     
-    Supported formats: PDF, DOCX, TXT, MD
+    Supported formats: PDF, DOCX, TXT, MD, JSON
+    Max file size: 50MB
     """
-    # Validate file type
-    SUPPORTED_EXTENSIONS = ['.pdf', '.docx', '.txt', '.md', '.markdown']
-    if not file.filename:
-        raise HTTPException(
-            status_code=400,
-            detail="Filename is required",
-        )
-    
-    file_ext = os.path.splitext(file.filename.lower())[1]
-    if file_ext not in SUPPORTED_EXTENSIONS:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Unsupported file format. Supported formats: {', '.join(SUPPORTED_EXTENSIONS)}",
-        )
-
-    # Check file size
+    # Read file content
     content = await file.read()
-    if len(content) > MAX_FILE_SIZE:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File too large. Maximum size: {MAX_FILE_SIZE / (1024*1024):.1f}MB",
-        )
+    
+    # Comprehensive file validation
+    try:
+        validation_result = validate_file_upload(file, content)
+        logger.info(f"File validation passed: {validation_result['filename']} ({validation_result['size']} bytes)")
+    except HTTPException as e:
+        logger.warning(f"File validation failed: {e.detail}")
+        raise
 
     # Save temporary file for processing
     file_ext = os.path.splitext(file.filename.lower())[1]

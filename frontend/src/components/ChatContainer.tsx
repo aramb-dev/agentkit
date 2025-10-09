@@ -12,6 +12,60 @@ import axios from 'axios';
 
 const API_BASE_URL = 'http://localhost:8000';
 
+// Retry utility with exponential backoff
+async function retryWithBackoff<T>(
+    fn: () => Promise<T>,
+    maxAttempts: number = 3,
+    initialDelay: number = 1000,
+    shouldRetry: (error: any) => boolean = () => true
+): Promise<T> {
+    let lastError: any;
+    
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+            return await fn();
+        } catch (error) {
+            lastError = error;
+            
+            // Check if we should retry this error
+            if (!shouldRetry(error) || attempt === maxAttempts) {
+                throw error;
+            }
+            
+            // Calculate exponential backoff delay
+            const delay = initialDelay * Math.pow(2, attempt - 1);
+            console.log(`Retry attempt ${attempt}/${maxAttempts} after ${delay}ms delay`);
+            
+            // Wait before retrying
+            await new Promise(resolve => setTimeout(resolve, delay));
+        }
+    }
+    
+    throw lastError;
+}
+
+// Determine if an error is retryable
+function isRetryableError(error: any): boolean {
+    if (axios.isAxiosError(error)) {
+        // Network errors are retryable
+        if (error.code === 'NETWORK_ERROR' || error.code === 'ERR_NETWORK' || error.code === 'ECONNABORTED') {
+            return true;
+        }
+        
+        // 5xx server errors are retryable
+        if (error.response?.status && error.response.status >= 500) {
+            return true;
+        }
+        
+        // 429 rate limit errors are retryable
+        if (error.response?.status === 429) {
+            return true;
+        }
+    }
+    
+    return false;
+}
+
 export function ChatContainer() {
     // const { addToast } = useToast();
     const [chatState, setChatState] = useState<ChatState>({
@@ -72,17 +126,23 @@ export function ChatContainer() {
 
             onProgressUpdate?.('processing', 30);
 
-            const response = await axios.post<DocumentIngestResponse>(`${API_BASE_URL}/docs/ingest`, formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-                onUploadProgress: (progressEvent) => {
-                    if (progressEvent.total) {
-                        const uploadProgress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
-                        onProgressUpdate?.('uploading', Math.min(uploadProgress, 25));
+            // Use retry logic for document ingestion
+            const response = await retryWithBackoff(
+                () => axios.post<DocumentIngestResponse>(`${API_BASE_URL}/docs/ingest`, formData, {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                    },
+                    onUploadProgress: (progressEvent) => {
+                        if (progressEvent.total) {
+                            const uploadProgress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+                            onProgressUpdate?.('uploading', Math.min(uploadProgress, 25));
+                        }
                     }
-                }
-            });
+                }),
+                3, // max attempts
+                1000, // initial delay 1s
+                isRetryableError
+            );
 
             onProgressUpdate?.('embedding', 70);
 
@@ -153,15 +213,29 @@ export function ChatContainer() {
 
             // Enhanced error message with better categorization
             let errorDetails = '';
+            let retryAfter: number | undefined;
+            
             if (axios.isAxiosError(error)) {
-                if (error.response?.status === 413) {
-                    errorDetails = '\n**Reason:** File size too large (max 10MB allowed)';
-                } else if (error.response?.status === 400) {
-                    errorDetails = '\n**Reason:** Unsupported file format (supported: PDF, DOCX, TXT, MD)';
-                } else if (error.code === 'NETWORK_ERROR') {
-                    errorDetails = '\n**Reason:** Network connection issue';
+                // Check for standardized error response
+                if (error.response?.data?.error) {
+                    const errorData = error.response.data.error;
+                    errorDetails = `\n**Reason:** ${errorData.message}`;
+                    retryAfter = errorData.retry_after;
+                    
+                    if (errorData.details?.file_size_mb) {
+                        errorDetails += `\n**File size:** ${errorData.details.file_size_mb}MB`;
+                    }
                 } else {
-                    errorDetails = '\n**Reason:** Server processing error';
+                    // Fallback to legacy error handling
+                    if (error.response?.status === 413) {
+                        errorDetails = '\n**Reason:** File size too large (max 50MB allowed)';
+                    } else if (error.response?.status === 400) {
+                        errorDetails = '\n**Reason:** Unsupported file format (supported: PDF, DOCX, TXT, MD, JSON)';
+                    } else if (error.code === 'NETWORK_ERROR' || error.code === 'ERR_NETWORK') {
+                        errorDetails = '\n**Reason:** Network connection issue';
+                    } else {
+                        errorDetails = '\n**Reason:** Server processing error';
+                    }
                 }
             }
 
@@ -170,10 +244,10 @@ export function ChatContainer() {
                 content: `❌ **Failed to process ${file.name}**${errorDetails}
 
 🔧 **What you can try:**
-• Check file format (supported: PDF, DOCX, TXT, MD)
-• Ensure file size is under 10MB
+• Check file format (supported: PDF, DOCX, TXT, MD, JSON)
+• Ensure file size is under 50MB
 • Check your internet connection
-• Try uploading again
+• Try uploading again${retryAfter ? `\n• Wait ${retryAfter} seconds before retrying` : ''}
 
 💡 **Note:** You can still attach the file for immediate processing, but it won't be available for future document retrieval.`,
                 role: 'assistant',
@@ -293,11 +367,17 @@ export function ChatContainer() {
                 }
             }
 
-            const response = await axios.post<AgentResponse>(`${API_BASE_URL}/chat`, formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-            });
+            // Use retry logic for the chat request
+            const response = await retryWithBackoff(
+                () => axios.post<AgentResponse>(`${API_BASE_URL}/chat`, formData, {
+                    headers: {
+                        'Content-Type': 'multipart/form-data',
+                    },
+                }),
+                3, // max attempts
+                1000, // initial delay 1s
+                isRetryableError
+            );
 
             const assistantMessage: ChatMessage = {
                 id: crypto.randomUUID(),
