@@ -45,7 +45,10 @@ class TestDocumentManagement:
             
             response = client.delete(f"/namespaces/{namespace}/documents/{doc_id}")
             assert response.status_code == 404
-            assert "not found" in response.json()["detail"].lower()
+            response_json = response.json()
+            # Check structured error response format
+            assert "error" in response_json
+            assert "not found" in response_json["error"]["message"].lower()
 
     def test_delete_document_namespace_not_found(self):
         """Test deleting a document from non-existent namespace."""
@@ -55,7 +58,10 @@ class TestDocumentManagement:
         with patch('app.main.list_collections', return_value=["other-namespace"]):
             response = client.delete(f"/namespaces/{namespace}/documents/{doc_id}")
             assert response.status_code == 404
-            assert "namespace" in response.json()["detail"].lower()
+            response_json = response.json()
+            # Check structured error response format
+            assert "error" in response_json
+            assert "namespace" in response_json["error"]["message"].lower()
 
     def test_delete_document_error(self):
         """Test error handling when deleting a document."""
@@ -67,7 +73,10 @@ class TestDocumentManagement:
             
             response = client.delete(f"/namespaces/{namespace}/documents/{doc_id}")
             assert response.status_code == 500
-            assert "failed" in response.json()["detail"].lower()
+            response_json = response.json()
+            # Check structured error response format
+            assert "error" in response_json
+            assert "message" in response_json["error"]
 
     def test_list_namespace_documents(self):
         """Test listing documents in a namespace."""
