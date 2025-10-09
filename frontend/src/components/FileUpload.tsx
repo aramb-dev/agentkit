@@ -38,7 +38,7 @@ export function FileUpload({
         onFilesAdded(newFiles);
     }, [onFilesAdded]);
 
-    const { getRootProps, getInputProps, isDragActive } = useDropzone({
+    const { getRootProps, getInputProps, isDragActive, fileRejections } = useDropzone({
         onDrop,
         accept: {
             'text/plain': ['.txt'],
@@ -48,8 +48,14 @@ export function FileUpload({
             'application/json': ['.json']
         },
         maxFiles,
-        maxSize: 10 * 1024 * 1024, // 10MB
-        disabled: uploadedFiles.length >= maxFiles
+        maxSize: 50 * 1024 * 1024, // 50MB
+        disabled: uploadedFiles.length >= maxFiles,
+        onDropRejected: (rejections) => {
+            // Log rejection reasons for debugging
+            rejections.forEach(rejection => {
+                console.warn('File rejected:', rejection.file.name, rejection.errors);
+            });
+        }
     });
 
     const formatFileSize = (bytes: number) => {
@@ -100,12 +106,31 @@ export function FileUpload({
                         }
                     </p>
                     <p className="text-xs text-muted-foreground">
-                        Supports: {acceptedTypes.join(', ')} (max {maxFiles} files, 10MB each)
+                        Supports: {acceptedTypes.join(', ')} (max {maxFiles} files, 50MB each)
                     </p>
                     {uploadedFiles.length >= maxFiles && (
                         <p className="text-xs text-red-500 mt-1">
                             Maximum number of files reached
                         </p>
+                    )}
+                    {fileRejections.length > 0 && (
+                        <div className="mt-2 space-y-1">
+                            {fileRejections.map(({ file, errors }) => (
+                                <p key={file.name} className="text-xs text-red-500">
+                                    <strong>{file.name}:</strong>{' '}
+                                    {errors.map(e => {
+                                        if (e.code === 'file-too-large') {
+                                            return 'File too large (max 50MB)';
+                                        } else if (e.code === 'file-invalid-type') {
+                                            return 'Unsupported file type';
+                                        } else if (e.code === 'too-many-files') {
+                                            return `Too many files (max ${maxFiles})`;
+                                        }
+                                        return e.message;
+                                    }).join(', ')}
+                                </p>
+                            ))}
+                        </div>
                     )}
                 </CardContent>
             </Card>
