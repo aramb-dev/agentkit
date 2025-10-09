@@ -1,0 +1,17 @@
+{
+  "name": "agentkit",
+  "version": "1.0.0",
+  "description": "**Enhanced RAG Frontend Integration Complete** ✨",
+  "main": "index.js",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:e2e": "npx playwright test",
+    "test:e2e:ui": "npx playwright test --ui"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@playwright/test": "^1.56.0"
+  }
+}

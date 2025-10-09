@@ -1,5 +1,7 @@
 # AgentKit - Intelligent AI Assistant with Modern Web Interface 🚀
 
+[![Test Suite](https://github.com/aramb-dev/agentkit/actions/workflows/test.yml/badge.svg)](https://github.com/aramb-dev/agentkit/actions/workflows/test.yml)
+
 **Enhanced RAG Frontend Integration Complete** ✨
 
 AgentKit is a powerful AI assistant that combines intelligent conversation with advanced document processing capabilities. The system features a modern React frontend with comprehensive RAG (Retrieval-Augmented Generation) document ingestion and multi-stage progress tracking.
@@ -256,17 +258,48 @@ MAX_FILE_SIZE=10485760  # 10MB default
 CONVERSATION_HISTORY_LIMIT=50  # Messages to keep in memory
 ```
 
-## 🧪 Development
+## 🧪 Testing
 
-### Running Tests
+AgentKit has comprehensive test coverage for both backend and frontend components.
+
+### Running All Tests
+
+```bash
+# Run the complete test suite
+./run_tests.sh
+```
+
+This will run:
+- Backend unit and integration tests with coverage
+- Frontend component tests with coverage
+- Generate HTML coverage reports
+
+### Running Tests Individually
 
 ```bash
 # Backend tests
-python -m pytest
+python -m pytest test_*.py -v
+
+# Backend tests with coverage
+python -m pytest test_*.py --cov=agent --cov=app --cov=rag --cov-report=html
 
 # Frontend tests
 cd frontend && npm test
+
+# Frontend tests with coverage
+cd frontend && npm run test:coverage
+
+# End-to-end tests
+npx playwright test
 ```
+
+### Test Coverage
+
+Coverage reports are generated in:
+- Backend: `htmlcov/index.html`
+- Frontend: `frontend/coverage/index.html`
+
+For detailed testing documentation, see [TESTING.md](TESTING.md)
 
 ### Building for Production
 
