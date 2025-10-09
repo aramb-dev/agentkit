@@ -8,6 +8,8 @@ test_docs/
 create_test_pdf.py
 test_*.txt
 *.pdf
+# RAG tuning results
+rag_tuning_results.json
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
