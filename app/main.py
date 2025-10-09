@@ -808,14 +808,39 @@ async def get_system_performance():
     }
 
 
+@app.get("/monitoring/rag")
+def get_rag_performance():
+    """Get RAG system performance metrics and configuration."""
+    from rag.store import get_performance_stats, get_cache_stats
+    
+    return {
+        "rag_performance": get_performance_stats(),
+        "timestamp": _get_current_timestamp()
+    }
+
+
+@app.post("/monitoring/rag/cache/clear")
+def clear_rag_cache():
+    """Clear RAG query cache."""
+    from rag.store import clear_cache
+    
+    clear_cache()
+    return {
+        "message": "RAG cache cleared successfully",
+        "timestamp": _get_current_timestamp()
+    }
+
+
 @app.post("/monitoring/reset")
 def reset_performance_metrics():
     """Reset all performance metrics (useful for testing)."""
     from agent.router import reset_routing_metrics
     from agent.tools import reset_tool_metrics
+    from rag.store import clear_cache
     
     reset_routing_metrics()
     reset_tool_metrics()
+    clear_cache()
     
     return {
         "message": "Performance metrics reset successfully",
@@ -839,6 +864,10 @@ async def get_system_status():
     """
     Get comprehensive system status including configuration and capabilities.
     """
+    from rag.store import get_config as get_rag_config
+    
+    rag_config = get_rag_config()
+    
     return {
         "status": "operational",
         "version": "1.0.0",
@@ -847,6 +876,11 @@ async def get_system_status():
             "conversation_history_limit": CONVERSATION_HISTORY_LIMIT,
             "google_api_configured": bool(os.getenv("GOOGLE_API_KEY")),
             "tavily_api_configured": bool(os.getenv("TAVILY_API_KEY")),
+            "rag_config": {
+                "embedding_model": rag_config.get("embedding_model"),
+                "default_k": rag_config.get("default_k"),
+                "cache_enabled": rag_config.get("cache_enabled")
+            }
         },
         "capabilities": {
             "ai_models": len(llm_client.get_available_models()),
@@ -860,6 +894,7 @@ async def get_system_status():
             "files": "/files",
             "health": "/healthz",
             "api_docs": "/docs",
+            "monitoring": "/monitoring/rag",
         },
     }
 

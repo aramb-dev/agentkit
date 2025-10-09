@@ -65,7 +65,22 @@ def extract_text_from_file(file_path: str) -> str:
 
 
 def chunk_text(text: str, chunk_size: int = 900, overlap: int = 150) -> List[str]:
-    """Split text into overlapping chunks for better retrieval."""
+    """
+    Split text into overlapping chunks for better retrieval.
+    
+    Args:
+        text: Text to chunk
+        chunk_size: Maximum characters per chunk (default: 900)
+        overlap: Character overlap between chunks (default: 150)
+        
+    Returns:
+        List of text chunks
+        
+    Optimization notes:
+        - Chunk size 700-900: Best balance of context and performance
+        - Overlap 15-20%: Preserves context across boundaries
+        - Sentence-aware: Avoids breaking mid-sentence
+    """
     # Simple sentence-ish splitter then window
     sentences = re.split(r"(?<=[.!?])\s+", text.strip())
     chunks, cur, cur_len = [], [], 0
@@ -90,10 +105,21 @@ def chunk_text(text: str, chunk_size: int = 900, overlap: int = 150) -> List[str
     return [c.strip() for c in chunks if len(c.strip()) > 30]
 
 
-def build_doc_chunks(file_path: str, metadata: Dict) -> List[Dict]:
-    """Extract text from document and build document chunks with metadata."""
+def build_doc_chunks(file_path: str, metadata: Dict, chunk_size: int = 900, overlap: int = 150) -> List[Dict]:
+    """
+    Extract text from document and build document chunks with metadata.
+    
+    Args:
+        file_path: Path to document file
+        metadata: Metadata to attach to chunks
+        chunk_size: Characters per chunk (default: 900)
+        overlap: Character overlap between chunks (default: 150)
+        
+    Returns:
+        List of chunk dictionaries with id, text, and metadata
+    """
     text = extract_text_from_file(file_path)
-    chunks = chunk_text(text)
+    chunks = chunk_text(text, chunk_size=chunk_size, overlap=overlap)
     doc_id = metadata.get("doc_id") or str(uuid.uuid4())
 
     results = []
