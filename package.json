@@ -4,7 +4,9 @@
   "description": "**Enhanced RAG Frontend Integration Complete** ✨",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "npx playwright test",
+    "test:e2e": "npx playwright test",
+    "test:e2e:ui": "npx playwright test --ui"
   },
   "keywords": [],
   "author": "",
