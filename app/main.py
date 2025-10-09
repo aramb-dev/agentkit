@@ -25,7 +25,7 @@ from agent.file_manager import file_manager
 import uuid
 import tempfile
 from rag.ingest import build_doc_chunks
-from rag.store import upsert_chunks, list_collections, delete_namespace, get_collection
+from rag.store import upsert_chunks, list_collections, delete_namespace, get_collection, delete_document
 
 app = FastAPI(title="AgentKit Chat API", version="1.0.0")
 
@@ -529,6 +529,39 @@ async def list_namespace_documents(namespace_name: str):
     except Exception as e:
         raise HTTPException(
             status_code=500, detail=f"Failed to list documents in namespace: {str(e)}"
+        )
+
+
+@app.delete("/namespaces/{namespace_name}/documents/{doc_id}")
+async def delete_document_endpoint(namespace_name: str, doc_id: str):
+    """Delete a specific document from a namespace."""
+    # Check if namespace exists
+    existing_namespaces = list_collections()
+    if namespace_name not in existing_namespaces and namespace_name != "default":
+        raise HTTPException(
+            status_code=404, detail=f"Namespace '{namespace_name}' not found"
+        )
+    
+    try:
+        deleted_chunks = delete_document(namespace_name, doc_id)
+        
+        if deleted_chunks == 0:
+            raise HTTPException(
+                status_code=404, detail=f"Document '{doc_id}' not found in namespace '{namespace_name}'"
+            )
+        
+        return {
+            "status": "success",
+            "message": f"Document deleted successfully",
+            "namespace": namespace_name,
+            "doc_id": doc_id,
+            "deleted_chunks": deleted_chunks
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to delete document: {str(e)}"
         )
 
 
