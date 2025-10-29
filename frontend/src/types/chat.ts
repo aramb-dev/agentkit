@@ -70,3 +70,34 @@ export interface DocumentIngestResponse {
     filename: string;
     doc_id: string;
 }
+
+export interface Conversation {
+    id: string;
+    session_id: string;
+    title: string;
+    namespace: string;
+    created_at: string;
+    updated_at: string;
+    message_count: number;
+    metadata?: Record<string, any>;
+    messages?: ConversationMessage[];
+}
+
+export interface ConversationMessage {
+    id: string;
+    conversation_id: string;
+    role: 'user' | 'assistant';
+    content: string;
+    model?: string;
+    tool_used?: string;
+    attachments?: any[];
+    citations?: any[];
+    timestamp: string;
+}
+
+export interface ConversationListResponse {
+    conversations: Conversation[];
+    total: number;
+    limit: number;
+    offset: number;
+}

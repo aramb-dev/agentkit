@@ -106,7 +106,7 @@ jobs:
     - name: Install Playwright
       run: |
         npm ci
-        npx playwright install --with-deps chromium
+        npx playwright install --with-deps
     
     - name: Install frontend dependencies
       run: |

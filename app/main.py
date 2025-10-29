@@ -30,9 +30,10 @@ import uuid
 import tempfile
 import logging
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from rag.ingest import build_doc_chunks
 from rag.store import upsert_chunks, list_collections, delete_namespace, get_collection, delete_document
+from app import database as db
 
 # Configure logging for error tracking
 logging.basicConfig(
@@ -287,6 +288,46 @@ async def chat(
             }
             for f in stored_files
         ]
+
+    # Persist conversation and messages to database
+    try:
+        # Get or create conversation
+        conversation = db.get_conversation_by_session(session_id)
+        if not conversation:
+            # Create new conversation with auto-generated title from first message
+            conv_title = message[:50] + "..." if len(message) > 50 else message
+            conversation = db.create_conversation(
+                conversation_id=str(uuid.uuid4()),
+                session_id=session_id,
+                title=conv_title,
+                namespace=namespace
+            )
+        
+        # Save user message
+        db.add_message(
+            message_id=str(uuid.uuid4()),
+            conversation_id=conversation["id"],
+            role="user",
+            content=message,
+            timestamp=datetime.now(timezone.utc).isoformat()
+        )
+        
+        # Save assistant response
+        db.add_message(
+            message_id=str(uuid.uuid4()),
+            conversation_id=conversation["id"],
+            role="assistant",
+            content=response.get("answer", ""),
+            model=model,
+            tool_used=response.get("tool_used"),
+            timestamp=datetime.now(timezone.utc).isoformat()
+        )
+        
+        # Add conversation ID to response
+        response["conversation_id"] = conversation["id"]
+    except Exception as e:
+        logger.error(f"Failed to persist conversation: {e}")
+        # Don't fail the request if persistence fails
 
     return response
 
@@ -895,8 +936,191 @@ async def get_system_status():
             "health": "/healthz",
             "api_docs": "/docs",
             "monitoring": "/monitoring/rag",
+            "conversations": "/conversations",
+            "conversation_detail": "/conversations/{id}",
+            "conversation_search": "/conversations/search/messages",
+            "conversation_export": "/conversations/{id}/export",
         },
     }
+
+
+# Conversation persistence endpoints
+
+@app.get("/conversations")
+async def list_conversations_endpoint(
+    limit: int = 50,
+    offset: int = 0,
+    namespace: Optional[str] = None,
+    search: Optional[str] = None
+):
+    """
+    List all conversations with pagination and optional filtering.
+    """
+    try:
+        conversations = db.list_conversations(
+            limit=limit,
+            offset=offset,
+            namespace=namespace,
+            search_query=search
+        )
+        return {
+            "conversations": conversations,
+            "total": len(conversations),
+            "limit": limit,
+            "offset": offset
+        }
+    except Exception as e:
+        logger.error(f"Failed to list conversations: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/conversations/{conversation_id}")
+async def get_conversation_endpoint(conversation_id: str):
+    """
+    Get a specific conversation with all its messages.
+    """
+    try:
+        conversation = db.get_conversation(conversation_id)
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        messages = db.get_messages(conversation_id)
+        conversation["messages"] = messages
+        
+        return conversation
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get conversation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/conversations/{conversation_id}")
+async def update_conversation_endpoint(
+    conversation_id: str,
+    title: Optional[str] = None,
+):
+    """
+    Update a conversation's title or metadata.
+    """
+    try:
+        success = db.update_conversation(
+            conversation_id=conversation_id,
+            title=title
+        )
+        if not success:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        return {"success": True, "conversation_id": conversation_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update conversation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/conversations/{conversation_id}")
+async def delete_conversation_endpoint(conversation_id: str):
+    """
+    Delete a conversation and all its messages.
+    """
+    try:
+        success = db.delete_conversation(conversation_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        return {"success": True, "conversation_id": conversation_id}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete conversation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/conversations/search/messages")
+async def search_messages_endpoint(
+    query: str,
+    conversation_id: Optional[str] = None,
+    limit: int = 50
+):
+    """
+    Search messages by content across conversations.
+    """
+    try:
+        messages = db.search_messages(
+            query=query,
+            conversation_id=conversation_id,
+            limit=limit
+        )
+        return {"messages": messages, "total": len(messages)}
+    except Exception as e:
+        logger.error(f"Failed to search messages: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/conversations/{conversation_id}/export")
+async def export_conversation_endpoint(conversation_id: str, format: str = "json"):
+    """
+    Export a conversation in various formats (json, txt, md).
+    """
+    try:
+        conversation = db.get_conversation(conversation_id)
+        if not conversation:
+            raise HTTPException(status_code=404, detail="Conversation not found")
+        
+        messages = db.get_messages(conversation_id)
+        conversation["messages"] = messages
+        
+        if format == "json":
+            return conversation
+        elif format == "txt":
+            # Plain text format
+            lines = [
+                f"Conversation: {conversation['title']}",
+                f"Created: {conversation['created_at']}",
+                f"Namespace: {conversation['namespace']}",
+                "=" * 50,
+                ""
+            ]
+            for msg in messages:
+                lines.append(f"{msg['role'].upper()}: {msg['content']}")
+                if msg.get('model'):
+                    lines.append(f"  (Model: {msg['model']})")
+                lines.append("")
+            
+            return {"content": "\n".join(lines), "format": "txt"}
+        elif format == "md":
+            # Markdown format
+            lines = [
+                f"# {conversation['title']}",
+                "",
+                f"**Created:** {conversation['created_at']}",
+                f"**Namespace:** {conversation['namespace']}",
+                f"**Messages:** {len(messages)}",
+                "",
+                "---",
+                ""
+            ]
+            for msg in messages:
+                if msg['role'] == 'user':
+                    lines.append(f"### 👤 User")
+                else:
+                    lines.append(f"### 🤖 Assistant")
+                    if msg.get('model'):
+                        lines.append(f"*Model: {msg['model']}*")
+                
+                lines.append("")
+                lines.append(msg['content'])
+                lines.append("")
+            
+            return {"content": "\n".join(lines), "format": "md"}
+        else:
+            raise HTTPException(status_code=400, detail="Invalid format. Supported: json, txt, md")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to export conversation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 if __name__ == "__main__":
