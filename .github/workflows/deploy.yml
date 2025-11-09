@@ -1,0 +1,141 @@
+name: Deploy to Production
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: 'Environment to deploy to'
+        required: true
+        default: 'production'
+        type: choice
+        options:
+          - production
+          - staging
+
+env:
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE_NAME: ${{ github.repository }}-backend
+  FRONTEND_IMAGE_NAME: ${{ github.repository }}-frontend
+
+jobs:
+  deploy:
+    name: Deploy to ${{ github.event.inputs.environment || 'production' }}
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ github.event.inputs.environment || 'production' }}
+      url: ${{ secrets.DEPLOYMENT_URL }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up deployment variables
+        id: vars
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            echo "TAG=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          else
+            echo "TAG=latest" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script: |
+            cd ${{ secrets.DEPLOY_PATH }}
+
+            # Pull latest code
+            git pull origin main
+
+            # Create .env file from secrets
+            cat > .env << EOF
+            GOOGLE_API_KEY=${{ secrets.GOOGLE_API_KEY }}
+            TAVILY_API_KEY=${{ secrets.TAVILY_API_KEY }}
+            ENVIRONMENT=production
+            LOG_LEVEL=INFO
+            MAX_FILE_SIZE=${{ secrets.MAX_FILE_SIZE || 52428800 }}
+            CONVERSATION_HISTORY_LIMIT=${{ secrets.CONVERSATION_HISTORY_LIMIT || 50 }}
+            ENABLE_RETRY_LOGIC=true
+            MAX_RETRY_ATTEMPTS=3
+            RETRY_DELAY_SECONDS=1
+            BACKEND_PORT=${{ secrets.BACKEND_PORT || 8000 }}
+            FRONTEND_PORT=${{ secrets.FRONTEND_PORT || 80 }}
+            VITE_API_URL=${{ secrets.VITE_API_URL }}
+            DATA_PATH=${{ secrets.DATA_PATH || './data' }}
+            UPLOADS_PATH=${{ secrets.UPLOADS_PATH || './uploads' }}
+            CHROMA_PATH=${{ secrets.CHROMA_PATH || './chroma_db' }}
+            EOF
+
+            # Login to registry
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ${{ env.REGISTRY }} -u ${{ github.actor }} --password-stdin
+
+            # Pull latest images
+            docker pull ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE_NAME }}:${{ steps.vars.outputs.TAG }}
+            docker pull ${{ env.REGISTRY }}/${{ env.FRONTEND_IMAGE_NAME }}:${{ steps.vars.outputs.TAG }}
+
+            # Deploy with docker-compose
+            docker-compose -f docker-compose.prod.yml down
+            docker-compose -f docker-compose.prod.yml up -d
+
+            # Wait for health checks
+            echo "Waiting for services to be healthy..."
+            sleep 10
+
+            # Check backend health
+            curl -f http://localhost:${{ secrets.BACKEND_PORT || 8000 }}/healthz || exit 1
+            curl -f http://localhost:${{ secrets.BACKEND_PORT || 8000 }}/readyz || exit 1
+
+            echo "Deployment successful!"
+
+      - name: Verify deployment
+        run: |
+          # Wait a bit for services to stabilize
+          sleep 15
+
+          # Check if services are responding
+          curl -f ${{ secrets.DEPLOYMENT_URL }}/api/healthz || exit 1
+
+      - name: Rollback on failure
+        if: failure()
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script: |
+            cd ${{ secrets.DEPLOY_PATH }}
+            docker-compose -f docker-compose.prod.yml down
+            git checkout HEAD~1
+            docker-compose -f docker-compose.prod.yml up -d
+            echo "Rollback completed"
+
+      - name: Cleanup old images
+        if: success()
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script: |
+            docker system prune -af --filter "until=72h"
+
+      - name: Notify deployment status
+        if: always()
+        uses: 8398a7/action-slack@v3
+        with:
+          status: ${{ job.status }}
+          text: |
+            Deployment to ${{ github.event.inputs.environment || 'production' }}
+            Status: ${{ job.status }}
+            Tag: ${{ steps.vars.outputs.TAG }}
+          webhook_url: ${{ secrets.SLACK_WEBHOOK }}
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK }}

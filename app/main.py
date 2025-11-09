@@ -897,7 +897,59 @@ def _get_current_timestamp():
 
 @app.get("/healthz")
 def healthz():
-    return {"status": "ok", "version": "1.0.0"}
+    """
+    Basic health check endpoint for liveness probe.
+    Returns OK if the application is running.
+    """
+    return {"status": "ok", "version": "1.0.0", "timestamp": datetime.now(timezone.utc).isoformat()}
+
+
+@app.get("/readyz")
+async def readyz():
+    """
+    Readiness check endpoint for production deployments.
+    Verifies that all critical dependencies are configured and accessible.
+    """
+    checks = {
+        "api": True,
+        "google_api_key": bool(os.getenv("GOOGLE_API_KEY")),
+        "database": False,
+        "vector_store": False,
+    }
+
+    # Check database connection
+    try:
+        db.get_db_connection()
+        checks["database"] = True
+    except Exception as e:
+        logger.error(f"Database readiness check failed: {e}")
+
+    # Check vector store
+    try:
+        from rag.store import get_config
+        config = get_config()
+        checks["vector_store"] = config is not None
+    except Exception as e:
+        logger.error(f"Vector store readiness check failed: {e}")
+
+    # Overall readiness
+    is_ready = all([
+        checks["api"],
+        checks["google_api_key"],
+        checks["database"],
+        checks["vector_store"]
+    ])
+
+    status_code = 200 if is_ready else 503
+
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "ready": is_ready,
+            "checks": checks,
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    )
 
 
 @app.get("/status")
