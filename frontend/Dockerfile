@@ -19,8 +19,35 @@ COPY . .
 # Build the application
 RUN npm run build
 
-# Stage 2: Production stage with Nginx
+# Stage 2: Development stage for hot-reloading
+FROM node:20-alpine as development
+
+# Set working directory
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci
+
+# Copy application code
+COPY . .
+
+# Expose Vite dev server port
+EXPOSE 5173
+
+# Set environment for hot-reloading in Docker
+ENV CHOKIDAR_USEPOLLING=true
+
+# Start development server
+CMD ["npm", "run", "dev", "--", "--host", "0.0.0.0"]
+
+# Stage 3: Production stage with Nginx
 FROM nginx:alpine as production
+
+# Install wget for healthchecks (before switching to non-root user)
+RUN apk add --no-cache wget
 
 # Copy custom nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf

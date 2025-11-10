@@ -33,7 +33,7 @@ import traceback
 import json
 from datetime import datetime, timezone
 from rag.ingest import build_doc_chunks
-from rag.store import upsert_chunks, list_collections, delete_namespace, get_collection, delete_document
+from rag.store import upsert_chunks, list_collections, delete_namespace, get_collection, delete_document, get_config
 from app import database as db
 
 # Import security utilities
@@ -990,7 +990,6 @@ async def readyz():
 
     # Check vector store
     try:
-        from rag.store import get_config
         config = get_config()
         checks["vector_store"] = config is not None
     except Exception as e:
@@ -1021,9 +1020,7 @@ async def get_system_status():
     """
     Get comprehensive system status including configuration and capabilities.
     """
-    from rag.store import get_config as get_rag_config
-    
-    rag_config = get_rag_config()
+    rag_config = get_config()
     
     return {
         "status": "operational",

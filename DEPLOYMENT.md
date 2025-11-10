@@ -361,13 +361,17 @@ server {
     ssl_certificate /etc/nginx/ssl/cert.pem;
     ssl_certificate_key /etc/nginx/ssl/key.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_ciphers HIGH:!aNULL:!MD5;
+
+    # Modern cipher suite (Mozilla Intermediate compatibility)
+    ssl_ciphers 'ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384';
+    ssl_prefer_server_ciphers off;
 
     # Security headers
     add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
     add_header X-Frame-Options "SAMEORIGIN" always;
     add_header X-Content-Type-Options "nosniff" always;
-    add_header X-XSS-Protection "1; mode=block" always;
+    # Note: X-XSS-Protection is deprecated - rely on CSP instead
+    add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'" always;
 
     # Backend API
     location /api/ {
@@ -588,20 +592,42 @@ Create `backup.sh`:
 BACKUP_DIR="/var/backups/agentkit"
 DATE=$(date +%Y%m%d_%H%M%S)
 
+# Source environment variables to get data paths
+set -o allexport
+source .env 2>/dev/null || true
+set +o allexport
+
+# Paths from .env, with defaults
+DATA_PATH=${DATA_PATH:-./data}
+UPLOADS_PATH=${UPLOADS_PATH:-./uploads}
+CHROMA_PATH=${CHROMA_PATH:-./chroma_db}
+
 # Create backup directory
 mkdir -p $BACKUP_DIR
 
-# Backup database
-docker exec agentkit-backend-prod tar -czf - /app/data > \
-  $BACKUP_DIR/database_$DATE.tar.gz
+# Backup data directly from host bind mount paths
+echo "Starting backup at $DATE..."
 
-# Backup uploads
-docker exec agentkit-backend-prod tar -czf - /app/uploads > \
-  $BACKUP_DIR/uploads_$DATE.tar.gz
+if [ -d "$DATA_PATH" ]; then
+  tar -czf $BACKUP_DIR/database_$DATE.tar.gz -C $(dirname $DATA_PATH) $(basename $DATA_PATH)
+  echo "Database backed up"
+else
+  echo "Warning: DATA_PATH $DATA_PATH not found"
+fi
 
-# Backup vector store
-docker exec agentkit-backend-prod tar -czf - /app/chroma_db > \
-  $BACKUP_DIR/chroma_$DATE.tar.gz
+if [ -d "$UPLOADS_PATH" ]; then
+  tar -czf $BACKUP_DIR/uploads_$DATE.tar.gz -C $(dirname $UPLOADS_PATH) $(basename $UPLOADS_PATH)
+  echo "Uploads backed up"
+else
+  echo "Warning: UPLOADS_PATH $UPLOADS_PATH not found"
+fi
+
+if [ -d "$CHROMA_PATH" ]; then
+  tar -czf $BACKUP_DIR/chroma_$DATE.tar.gz -C $(dirname $CHROMA_PATH) $(basename $CHROMA_PATH)
+  echo "Vector store backed up"
+else
+  echo "Warning: CHROMA_PATH $CHROMA_PATH not found"
+fi
 
 # Remove backups older than 30 days
 find $BACKUP_DIR -type f -mtime +30 -delete
@@ -613,18 +639,24 @@ echo "Backup completed: $DATE"
 
 ```bash
 # Run daily at 2 AM
-0 2 * * * /path/to/backup.sh >> /var/log/agentkit-backup.log 2>&1
+0 2 * * * cd /path/to/agentkit && /path/to/backup.sh >> /var/log/agentkit-backup.log 2>&1
 ```
 
 ### Recovery
 
 ```bash
+# Source environment to get paths
+set -o allexport
+source .env
+set +o allexport
+
 # Stop services
 docker-compose -f docker-compose.prod.yml down
 
-# Restore data
-docker run --rm -v agentkit-data:/app/data -v /path/to/backup:/backup \
-  alpine tar -xzf /backup/database_YYYYMMDD_HHMMSS.tar.gz -C /
+# Restore data to host bind mount paths
+tar -xzf /path/to/backup/database_YYYYMMDD_HHMMSS.tar.gz -C $(dirname ${DATA_PATH:-./data})
+tar -xzf /path/to/backup/uploads_YYYYMMDD_HHMMSS.tar.gz -C $(dirname ${UPLOADS_PATH:-./uploads})
+tar -xzf /path/to/backup/chroma_YYYYMMDD_HHMMSS.tar.gz -C $(dirname ${CHROMA_PATH:-./chroma_db})
 
 # Restart services
 docker-compose -f docker-compose.prod.yml up -d
