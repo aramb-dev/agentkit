@@ -41,6 +41,27 @@ These variables **must** be set for the application to function properly.
 
 ---
 
+## Security Configuration
+
+### `ALLOWED_ORIGINS`
+
+- **Description**: Comma-separated list of allowed CORS origins
+- **Required**: No
+- **Default**: `http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080`
+- **Example**: `ALLOWED_ORIGINS=https://app.yourdomain.com,https://www.yourdomain.com`
+- **Used by**: CORS middleware in backend
+- **Impact**:
+  - Controls which domains can make API requests
+  - Critical for production security
+  - Must include all legitimate frontend URLs
+- **Notes**:
+  - Do NOT use wildcards (*)
+  - Use exact origin URLs including protocol
+  - Separate multiple origins with commas (no spaces)
+  - Update this for production deployment
+
+---
+
 ## Application Settings
 
 ### `ENVIRONMENT`
@@ -54,6 +75,8 @@ These variables **must** be set for the application to function properly.
   - Affects logging verbosity
   - Controls debug mode features
   - Influences error message detail
+  - Disables API documentation in production
+  - Enables stricter security headers
 
 ### `LOG_LEVEL`
 
@@ -63,7 +86,7 @@ These variables **must** be set for the application to function properly.
 - **Allowed values**: `DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`
 - **Example**: `LOG_LEVEL=WARNING`
 - **Impact**:
-  - `DEBUG`: Very detailed logs (use in development)
+  - `DEBUG`: Very detailed logs (use in development only)
   - `INFO`: Standard operational logs (recommended for production)
   - `WARNING`: Only warnings and errors
   - `ERROR`: Only error messages

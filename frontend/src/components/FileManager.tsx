@@ -10,7 +10,8 @@ import { NamespaceSelector } from "./NamespaceSelector";
 import { Trash2, RefreshCw, FolderOpen, File, Search } from "lucide-react";
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000';
+// Use environment variable with fallback to localhost for development
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 interface StoredFile {
     file_id: string;

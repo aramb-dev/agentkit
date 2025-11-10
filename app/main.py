@@ -17,7 +17,7 @@ RETRY_DELAY_SECONDS = int(os.getenv("RETRY_DELAY_SECONDS", "1"))
 # Add the parent directory to Python path so we can import the agent module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, status
+from fastapi import FastAPI, UploadFile, File, Form, HTTPException, Request, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, validator
@@ -30,27 +30,58 @@ import uuid
 import tempfile
 import logging
 import traceback
+import json
 from datetime import datetime, timezone
 from rag.ingest import build_doc_chunks
 from rag.store import upsert_chunks, list_collections, delete_namespace, get_collection, delete_document
 from app import database as db
 
+# Import security utilities
+from app.security import (
+    limiter,
+    add_security_headers,
+    rate_limit_handler,
+    sanitize_error_message,
+    validate_file_upload,
+    get_allowed_origins,
+    ChatRequest,
+    NamespaceRequest,
+    ConversationUpdateRequest,
+    audit_log
+)
+from slowapi.errors import RateLimitExceeded
+
 # Configure logging for error tracking
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.INFO if os.getenv("ENVIRONMENT") == "production" else logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
-app = FastAPI(title="AgentKit Chat API", version="1.0.0")
+app = FastAPI(
+    title="AgentKit Chat API",
+    version="1.0.0",
+    docs_url="/docs" if os.getenv("ENVIRONMENT") != "production" else None,  # Disable docs in prod
+    redoc_url="/redoc" if os.getenv("ENVIRONMENT") != "production" else None
+)
 
-# Add CORS middleware to allow frontend connections
+# Add rate limiter to app state
+app.state.limiter = limiter
+
+# Add security headers middleware
+app.middleware("http")(add_security_headers)
+
+# Add rate limit exception handler
+app.add_exception_handler(RateLimitExceeded, rate_limit_handler)
+
+# Configure CORS with environment-based origins
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://127.0.0.1:5173"],  # Vite dev server
+    allow_origins=get_allowed_origins(),  # Now configurable via environment
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],  # Explicit methods only
+    allow_headers=["Content-Type", "Authorization", "X-Request-ID"],  # Explicit headers only
+    max_age=3600,  # Cache preflight requests for 1 hour
 )
 
 
@@ -98,21 +129,19 @@ async def http_exception_handler(request: Request, exc: HTTPException):
 @app.exception_handler(Exception)
 async def general_exception_handler(request: Request, exc: Exception):
     """Handle unexpected exceptions with standardized error format."""
-    # Log the full error with traceback
-    logger.error(f"Unhandled exception: {str(exc)}\n{traceback.format_exc()}")
-    
+    # Get sanitized error message (logs full details server-side)
+    safe_message = sanitize_error_message(exc, request)
+
+    # Never expose internal details to clients
     error_response = ErrorResponse(
         error=ErrorDetail(
             code=ErrorCodes.INTERNAL_ERROR,
-            message="An unexpected error occurred. Please try again later.",
-            details={
-                "error_type": type(exc).__name__,
-                "path": str(request.url.path)
-            } if os.getenv("DEBUG") else None
+            message=safe_message,
+            details=None  # Never expose details in production
         ),
         request_id=request.headers.get("X-Request-ID")
     )
-    
+
     return JSONResponse(
         status_code=500,
         content=error_response.model_dump()
@@ -192,7 +221,9 @@ class ErrorCodes:
 
 
 @app.post("/chat")
+@limiter.limit("10/minute")  # Rate limit: 10 requests per minute
 async def chat(
+    request: Request,  # Required for rate limiting
     message: str = Form(...),
     model: str = Form(...),
     history: str = Form(default="[]"),  # JSON string of message history
@@ -205,17 +236,49 @@ async def chat(
     Send a chat message to AgentKit with optional file attachments and conversation history.
     Supports RAG retrieval from previously ingested documents using namespace isolation.
     Advanced search modes: auto (intelligent selection), web, documents, or hybrid (both).
-    """
-    import json
 
-    # Parse conversation history
+    Rate limited to 10 requests per minute per IP address.
+    """
+    # Input validation
+    if not message or len(message) > 10000:
+        raise HTTPException(status_code=400, detail="Message must be between 1 and 10000 characters")
+
+    if not model or len(model) > 100:
+        raise HTTPException(status_code=400, detail="Model name must be between 1 and 100 characters")
+
+    if search_mode not in ['auto', 'web', 'documents', 'hybrid']:
+        raise HTTPException(status_code=400, detail="Invalid search mode")
+
+    # Validate namespace format
+    if not namespace or len(namespace) > 64:
+        raise HTTPException(status_code=400, detail="Namespace must be between 1 and 64 characters")
+
+    import re
+    if not re.match(r'^[a-zA-Z0-9_-]+$', namespace):
+        raise HTTPException(
+            status_code=400,
+            detail="Namespace can only contain letters, numbers, underscores, and hyphens"
+        )
+
+    # Parse and validate conversation history
     try:
+        if len(history) > 500000:  # 500KB limit on history
+            raise HTTPException(status_code=400, detail="Conversation history too large")
+
         conversation_history = json.loads(history) if history != "[]" else []
+
+        # Validate history structure
+        for msg in conversation_history:
+            if not isinstance(msg, dict) or 'role' not in msg or 'content' not in msg:
+                raise HTTPException(status_code=400, detail="Invalid history format")
+            if msg['role'] not in ['user', 'assistant', 'system']:
+                raise HTTPException(status_code=400, detail="Invalid message role in history")
+
         # Limit conversation history to prevent memory issues
         if len(conversation_history) > CONVERSATION_HISTORY_LIMIT:
             conversation_history = conversation_history[-CONVERSATION_HISTORY_LIMIT:]
     except json.JSONDecodeError:
-        conversation_history = []
+        raise HTTPException(status_code=400, detail="Invalid JSON in history parameter")
 
     # Process uploaded files if any
     processed_files = []
@@ -226,22 +289,23 @@ async def chat(
             if file.filename:
                 content = await file.read()
 
-                # Validate file with comprehensive checks
+                # Validate file with comprehensive security checks
                 try:
-                    validation_result = validate_file_upload(file, content)
-                    logger.info(f"Chat file validated: {validation_result['filename']}")
+                    safe_filename, _ = validate_file_upload(file.filename, content, MAX_FILE_SIZE)
+                    logger.info(f"Chat file validated: {safe_filename}")
                 except HTTPException as e:
-                    logger.error(f"Chat file validation failed: {e.detail}")
+                    logger.warning(f"Chat file validation failed: {e.detail}")
                     raise
 
                 # Store file permanently
                 file_metadata = await file_manager.store_file(
                     content,
-                    file.filename,
+                    safe_filename,  # Use sanitized filename
                     file.content_type or "application/octet-stream",
                     user_id="default",  # TODO: Add proper user management
                 )
                 stored_files.append(file_metadata)
+                audit_log("FILE_UPLOAD", {"filename": safe_filename, "size": len(content)})
 
                 # Process file content for immediate use
                 file_result = await DocumentProcessor.process_file(

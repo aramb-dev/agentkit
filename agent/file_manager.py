@@ -24,10 +24,14 @@ class FileManager:
         self.files_dir.mkdir(exist_ok=True)
 
     def generate_file_id(self, content: bytes, filename: str) -> str:
-        """Generate unique file ID based on content hash and filename."""
-        content_hash = hashlib.sha256(content).hexdigest()[:16]
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        return f"{timestamp}_{content_hash}_{uuid.uuid4().hex[:8]}"
+        """
+        Generate cryptographically secure file ID.
+        Uses secrets module for unpredictable, non-enumerable IDs.
+        """
+        import secrets
+        # Use cryptographically secure random token
+        # 32 bytes = 256 bits of entropy, URL-safe base64 encoded
+        return secrets.token_urlsafe(32)
 
     async def store_file(
         self,
