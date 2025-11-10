@@ -199,6 +199,66 @@ npm run dev
 
 The frontend will be available at `http://localhost:5173`
 
+## 🐳 Docker Deployment
+
+### Quick Start with Docker
+
+The fastest way to get AgentKit running is with Docker Compose:
+
+```bash
+# Clone and configure
+git clone https://github.com/aramb-dev/agentkit.git
+cd agentkit
+cp .env.example .env
+
+# Edit .env with your API keys
+nano .env  # Add GOOGLE_API_KEY and TAVILY_API_KEY
+
+# Launch with Docker Compose
+docker-compose up -d
+
+# Access the application
+# Frontend: http://localhost:8080
+# Backend API: http://localhost:8000
+# API Docs: http://localhost:8000/docs
+```
+
+### Production Deployment
+
+For production deployments with optimized builds:
+
+```bash
+# Use production compose file
+docker-compose -f docker-compose.prod.yml up -d
+
+# Check health status
+curl http://localhost:8000/healthz
+curl http://localhost:8000/readyz
+```
+
+### Docker Features
+
+- ✅ **Multi-stage builds**: Optimized image sizes
+- ✅ **Health checks**: Built-in liveness and readiness probes
+- ✅ **Non-root users**: Enhanced security
+- ✅ **Volume persistence**: Data, uploads, and vector store
+- ✅ **Resource limits**: CPU and memory constraints
+- ✅ **Auto-restart**: Resilient deployment
+- ✅ **Nginx frontend**: Production-ready static serving
+
+### Documentation
+
+- 📖 **[Docker Quick Start Guide](./DOCKER_QUICKSTART.md)** - Get started in minutes
+- 📖 **[Production Deployment Guide](./DEPLOYMENT.md)** - Complete production setup
+- 📖 **[Environment Variables](./ENVIRONMENT_VARIABLES.md)** - Configuration reference
+- 📖 **[CI/CD Setup](./.github/workflows/)** - Automated deployments
+
+### Health Endpoints
+
+- `/healthz` - Liveness probe (basic health check)
+- `/readyz` - Readiness probe (dependencies check)
+- `/status` - Comprehensive system status
+
 ## 🎯 Usage Examples
 
 ### Chat Interface

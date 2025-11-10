@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  # Backend API service
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    container_name: agentkit-backend-dev
+    ports:
+      - "8000:8000"
+    environment:
+      # API Keys (must be set in .env file)
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - TAVILY_API_KEY=${TAVILY_API_KEY}
+
+      # File upload configuration
+      - MAX_FILE_SIZE=${MAX_FILE_SIZE:-52428800}
+
+      # Conversation settings
+      - CONVERSATION_HISTORY_LIMIT=${CONVERSATION_HISTORY_LIMIT:-50}
+
+      # Error handling
+      - ENABLE_RETRY_LOGIC=${ENABLE_RETRY_LOGIC:-true}
+      - MAX_RETRY_ATTEMPTS=${MAX_RETRY_ATTEMPTS:-3}
+      - RETRY_DELAY_SECONDS=${RETRY_DELAY_SECONDS:-1}
+
+      # Environment
+      - ENVIRONMENT=development
+    volumes:
+      # Mount source code for hot-reloading in development
+      - ./app:/app/app
+      - ./agent:/app/agent
+      - ./rag:/app/rag
+
+      # Persistent data volumes
+      - backend-data:/app/data
+      - backend-uploads:/app/uploads
+      - backend-chroma:/app/chroma_db
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/healthz')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - agentkit-network
+
+  # Frontend service (development with hot-reloading)
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      target: development
+    container_name: agentkit-frontend-dev
+    ports:
+      - "5173:5173"
+    environment:
+      - VITE_API_URL=http://localhost:8000
+      - CHOKIDAR_USEPOLLING=true
+    volumes:
+      # Mount source code for hot-reloading
+      - ./frontend:/app
+      # Prevent host node_modules from overwriting container's
+      - /app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - agentkit-network
+
+volumes:
+  backend-data:
+    driver: local
+  backend-uploads:
+    driver: local
+  backend-chroma:
+    driver: local
+
+networks:
+  agentkit-network:
+    driver: bridge

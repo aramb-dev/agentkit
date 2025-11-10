@@ -22,7 +22,8 @@ import { Label } from "@/components/ui/label";
 import { Plus, Settings, Trash2, Edit, FolderOpen } from "lucide-react";
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:8000';
+// Use environment variable with fallback to localhost for development
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 interface Namespace {
     name: string;
